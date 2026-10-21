@@ -1,0 +1,69 @@
+{% macro led(level, big=False) -%}
+<span class="led {{ level }}{% if big %} big{% endif %}" aria-hidden="true"></span>
+{%- endmacro %}
+
+{% macro readouts(endpoints) -%}
+<div class="readouts">
+  {% for e in endpoints %}
+  <span class="readout"><span class="dot{% if e.up %} up{% endif %}" aria-hidden="true"></span>{{ e.label }} <b>{{ e.value }}</b><span class="visually-hidden">{{ 'activo' if e.up else 'inactivo' }}</span></span>
+  {% endfor %}
+</div>
+{%- endmacro %}
+
+{% macro input(name, label, value='', type='text', hint='', placeholder='', autocomplete='off', attrs='') -%}
+<div class="field" data-field="{{ name }}">
+  <label for="f-{{ name }}">{{ label }}</label>
+  <input id="f-{{ name }}" name="{{ name }}" type="{{ type }}" value="{{ value if value is not none else '' }}" placeholder="{{ placeholder }}" autocomplete="{{ autocomplete }}" {{ attrs }}>
+  {% if hint %}<span class="hint">{{ hint }}</span>{% endif %}
+  <span class="err" role="alert"></span>
+</div>
+{%- endmacro %}
+
+{% macro check(name, label, checked=False, hint='') -%}
+<div class="field" data-field="{{ name }}">
+  <label class="check"><input type="checkbox" name="{{ name }}" value="1" {% if checked %}checked{% endif %}>
+    <span>{{ label }}{% if hint %}<small>{{ hint }}</small>{% endif %}</span></label>
+  <span class="err" role="alert"></span>
+</div>
+{%- endmacro %}
+
+{% macro job_console(key, last_job) -%}
+<section class="console {% if not last_job %}idle{% endif %}" data-job="{{ key }}" aria-live="polite">
+  <header>
+    {% if last_job %}{{ led('warn' if last_job.status == 'running' else ('ok' if last_job.status == 'ok' else 'err')) }}
+    {% else %}{{ led('off') }}{% endif %}
+    <span class="title">{{ last_job.title if last_job else 'Registro de tareas' }}</span>
+    <span class="muted when">{{ (last_job.started | ago) if last_job else '' }}</span>
+  </header>
+  <pre tabindex="0">{% if not last_job %}Aquí verás el avance de despliegues y acciones de este servicio.{% endif %}</pre>
+</section>
+{%- endmacro %}
+
+{% macro control_buttons(m, actions, status) -%}
+{% if status.installed %}
+<div class="btnrow">
+  {% for verb, a in actions.items() %}
+  <button class="btn small" type="button" data-action="/api/m/{{ m.key }}/action/{{ verb }}">{{ a[0] }}</button>
+  {% endfor %}
+</div>
+{% endif %}
+{%- endmacro %}
+
+{% macro uninstall_panel(m) -%}
+<section class="panel">
+  <h2>Retirar {{ m.name }}</h2>
+  <p>Detiene el servicio y quita sus reglas de firewall. Los datos se conservan en disco.</p>
+  <button class="btn danger small" type="button" data-open="dlg-uninstall">Desinstalar…</button>
+  <dialog id="dlg-uninstall">
+    <form data-api="/api/m/{{ m.key }}/uninstall" data-close>
+      <h2>Desinstalar {{ m.name }}</h2>
+      <p class="muted">Confirma con la contraseña de la consola.</p>
+      {{ input('password', 'Contraseña de la consola', type='password', autocomplete='current-password') }}
+      <div class="formfoot">
+        <button class="btn danger" type="submit">Desinstalar</button>
+        <button class="btn" type="button" data-dismiss>Cancelar</button>
+      </div>
+    </form>
+  </dialog>
+</section>
+{%- endmacro %}

@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Ingresar · {{ app_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ app_version }}">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+</head>
+<body>
+<div class="login">
+  <div class="card panel">
+    <div class="lamps" aria-hidden="true"><span class="led ok"></span><span class="led warn"></span><span class="led off"></span><span class="led off"></span></div>
+    <div class="brand"><strong>{{ app_name }}</strong></div>
+    {% if not configured %}
+    <div class="note bad"><p>La consola aún no tiene contraseña. Ejecuta <code>sudo ./install.sh</code> o <code>sudo scripts/reset-password.sh</code> en el servidor.</p></div>
+    {% endif %}
+    <form method="post">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <div class="field"><label for="u">Usuario</label><input id="u" name="username" type="text" value="admin" autocomplete="username" required></div>
+      <div class="field"><label for="p">Contraseña</label><input id="p" name="password" type="password" autocomplete="current-password" required autofocus></div>
+      {% if error %}<div class="note bad" role="alert"><p>{{ error }}</p></div>{% endif %}
+      <button class="btn primary" type="submit">Ingresar</button>
+    </form>
+  </div>
+</div>
+</body>
+</html>

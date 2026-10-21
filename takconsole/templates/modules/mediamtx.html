@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel %}
+{% block title %}MediaMTX{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="title">{{ led(status.level, big=True) }}
+    <div><h1>MediaMTX</h1><p>{{ status.label }}. Video en vivo para ATAK, CloudTAK y navegadores.</p></div>
+  </div>
+  {{ control_buttons(m, actions, status) }}
+</div>
+
+<div class="module">
+  <div>
+    <section class="panel">
+      <h2>Configuración</h2>
+      <p>Activa solo los protocolos que usarán tus fuentes de video. Cada protocolo abre sus puertos según la política de exposición.</p>
+      <form data-api="/api/m/mediamtx/deploy" data-reload>
+        <fieldset>
+          <legend>Protocolos</legend>
+          <div class="protocols">
+            {% for k, meta in protocols.items() %}
+            {{ check(k, meta.label, p.get(k, k in ('rtsp', 'srt')), hint=meta.ports | map('join', '/') | join(', ')) }}
+            {% endfor %}
+          </div>
+          {{ check('tls', 'RTSPS con certificado de la CA de TAK', p.get('tls', False), hint='Puerto 8322/tcp. Requiere TAK Server desplegado.' if tak_ca else 'Disponible cuando TAK Server esté desplegado.') }}
+        </fieldset>
+        <fieldset>
+          <legend>Credenciales</legend>
+          <div class="grid2">
+            {{ input('publish_user', 'Usuario de publicación', p.publish_user or 'publicador', hint='Drones, cámaras y codificadores') }}
+            {{ input('publish_pass', 'Contraseña de publicación', '', type='password', autocomplete='new-password', hint='Vacía: se conserva la actual o se genera una') }}
+            {{ input('read_user', 'Usuario de lectura', p.read_user or 'visor', hint='Clientes que miran el video') }}
+            {{ input('read_pass', 'Contraseña de lectura', '', type='password', autocomplete='new-password', hint='Vacía: se conserva la actual o se genera una') }}
+          </div>
+          {{ check('anonymous_read', 'Permitir ver sin contraseña', p.get('anonymous_read', False), hint='Útil solo si la exposición está limitada a ZeroTier') }}
+        </fieldset>
+        <fieldset>
+          <legend>Grabación</legend>
+          <div class="grid2">
+            <div>{{ check('record', 'Grabar todas las transmisiones', p.get('record', False), hint='Segmentos fMP4 de 1 hora') }}</div>
+            {{ input('record_days', 'Conservar grabaciones (días)', p.record_days or 7, type='number', attrs='min=1 max=365') }}
+          </div>
+        </fieldset>
+        <div class="formfoot">
+          <button class="btn primary" type="submit">{{ 'Aplicar configuración' if status.installed else 'Desplegar MediaMTX' }}</button>
+          <span class="muted">Imagen {{ image }}</span>
+        </div>
+      </form>
+    </section>
+
+    {% if status.installed %}
+    <section class="panel">
+      <h2>Transmisiones activas</h2>
+      <p>Se actualiza cada 5 segundos desde la API local de MediaMTX.</p>
+      <table class="list" data-mtx-paths>
+        <thead><tr><th>Ruta</th><th>Fuente</th><th>Pistas</th><th>Lectores</th></tr></thead>
+        <tbody><tr><td colspan="4" class="muted">Cargando…</td></tr></tbody>
+      </table>
+    </section>
+    <section class="panel">
+      <h2>Registro del contenedor</h2>
+      <button class="btn small" type="button" data-logs="/api/m/mediamtx/logs" data-target="mtx-logs">Ver registro</button>
+      <pre class="logs" id="mtx-logs" hidden></pre>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside>
+    {{ job_console(m.key, last_job) }}
+    {% if status.installed %}
+    <section class="panel">
+      <h2>Direcciones</h2>
+      {{ readouts(status.endpoints) }}
+      {% set h = hosts[0] if hosts else 'SERVIDOR' %}
+      <p class="muted mt">Reemplaza <code>camara1</code> por el nombre de la transmisión.</p>
+      {% if p.rtsp %}<div class="field"><label>Publicar o ver por RTSP</label>
+        <div class="copy"><code>rtsp://{{ p.publish_user }}:CLAVE@{{ h }}:8554/camara1</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+      {% if p.srt %}<div class="field"><label>Publicar por SRT</label>
+        <div class="copy"><code>srt://{{ h }}:8890?streamid=publish:camara1:{{ p.publish_user }}:CLAVE&amp;pkt_size=1316</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>
+        <div class="field"><label>Ver por SRT</label>
+        <div class="copy"><code>srt://{{ h }}:8890?streamid=read:camara1:{{ p.read_user if not p.anonymous_read else 'any' }}:CLAVE</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+      {% if p.rtmp %}<div class="field"><label>Publicar por RTMP</label>
+        <div class="copy"><code>rtmp://{{ h }}:1935/camara1?user={{ p.publish_user }}&amp;pass=CLAVE</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+      {% if p.hls %}<div class="field"><label>Ver en navegador (HLS)</label>
+        <div class="copy"><code>http://{{ h }}:8888/camara1/</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+      {% if p.webrtc %}<div class="field"><label>Ver en navegador (WebRTC)</label>
+        <div class="copy"><code>http://{{ h }}:8889/camara1/</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+      <details class="mt"><summary>Credenciales actuales</summary>
+        <dl class="facts">
+          <dt>{{ p.publish_user }}</dt><dd>{{ p.publish_pass }}</dd>
+          {% if not p.anonymous_read %}<dt>{{ p.read_user }}</dt><dd>{{ p.read_pass }}</dd>{% endif %}
+        </dl>
+      </details>
+    </section>
+    {{ uninstall_panel(m) }}
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

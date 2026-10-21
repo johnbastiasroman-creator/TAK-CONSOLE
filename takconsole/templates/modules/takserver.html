@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel %}
+{% block title %}TAK Server{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="title">{{ led(status.level, big=True) }}
+    <div><h1>TAK Server</h1><p>{{ status.label }}{% if status.version %}, versión {{ status.version }}{% endif %}</p></div>
+  </div>
+  {{ control_buttons(m, actions, status) }}
+</div>
+
+<div class="module">
+  <div>
+    <section class="panel">
+      <h2>1. Paquete de instalación</h2>
+      <p>Descarga el .deb de TAK Server desde tak.gov y súbelo aquí. Opcionalmente agrega la llave GPG y la política para verificar la firma.</p>
+      <form class="upload{% if package_ok %} ready{% endif %}" data-upload="/api/m/takserver/upload">
+        <div class="grid2">
+          <div class="field" data-field="package"><label for="f-package">Paquete takserver_*.deb</label>
+            <input id="f-package" name="package" type="file" accept=".deb"><span class="err" role="alert"></span></div>
+          <div class="field"><label for="f-gpg">Llave GPG (opcional)</label>
+            <input id="f-gpg" name="gpg_key" type="file" accept=".key"><span class="hint">takserver-public-gpg.key</span></div>
+          <div class="field"><label for="f-pol">Política (opcional)</label>
+            <input id="f-pol" name="policy" type="file" accept=".pol"><span class="hint">deb_policy.pol</span></div>
+        </div>
+        <div class="formfoot">
+          <button class="btn" type="submit">Subir archivos</button>
+          <span class="muted" data-upload-status>
+            {% if package_ok %}Listo para instalar: {{ package_name }}{% if st.package_version %} ({{ st.package_version }}){% endif %}
+            {% elif status.installed %}Instalado {{ status.version }}. Sube un .deb solo para actualizar.
+            {% else %}Aún no hay paquete.{% endif %}
+          </span>
+        </div>
+        <div class="progress"><progress max="100" value="0"></progress></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>2. Parámetros de la implementación</h2>
+      <p>Definen la autoridad certificadora y el acceso de administración. Los datos del certificado van sin tildes ni ñ.</p>
+      <form data-api="/api/m/takserver/deploy" data-reload>
+        {% if not supported_os %}<div class="note bad"><p>Sistema detectado: {{ os_label }}. El instalador está probado en Ubuntu 22.04 LTS.</p></div>{% endif %}
+        <fieldset>
+          <legend>Autoridad certificadora</legend>
+          <div class="grid3">
+            {{ input('country', 'País', st.country or 'CL', hint='Código ISO de 2 letras', attrs='maxlength=2') }}
+            {{ input('state', 'Región', st.state or '', placeholder='Valparaiso') }}
+            {{ input('city', 'Ciudad', st.city or '', placeholder='Vina del Mar') }}
+          </div>
+          <div class="grid2">
+            {{ input('org', 'Organización', st.org or '', placeholder='Mi Organizacion') }}
+            {{ input('ou', 'Unidad', st.ou or '', placeholder='Comunicaciones') }}
+            {{ input('root_ca', 'Nombre de la CA raíz', st.root_ca or '', placeholder='ORG-ROOT-CA', hint='5 a 32 caracteres, sin guion bajo') }}
+            {{ input('int_ca', 'Nombre de la CA intermedia', st.int_ca or int_ca or '', placeholder='ORG-INT-CA', hint='Firma los certificados de servidor y usuarios') }}
+          </div>
+          <div class="grid2">
+            {{ input('cert_pass', 'Contraseña de certificados', '', type='password', autocomplete='new-password', hint=('Vacía: se usa la actual. ' if st.cert_pass else '') ~ 'Protege los .p12/.jks y la clave de la CA. Evita «atakatak».') }}
+            {% if certs_exist %}
+            <div>{{ check('regenerate', 'Regenerar certificados', hint='Crea una CA nueva. Todos los clientes necesitarán paquetes nuevos.') }}</div>
+            {% endif %}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Administrador web (puerto 8446)</legend>
+          <div class="grid2">
+            {{ input('admin_user', 'Usuario', st.admin_user or 'webadmin') }}
+            {{ input('admin_pass', 'Contraseña', '', type='password', autocomplete='new-password', hint='Mínimo 15 caracteres con mayúscula, minúscula, número y símbolo. Déjala vacía para no cambiarla.' if status.installed else 'Mínimo 15 caracteres con mayúscula, minúscula, número y símbolo.') }}
+          </div>
+        </fieldset>
+        <fieldset>
+          <legend>Opciones</legend>
+          <div class="grid2">
+            <div>{{ check('enrollment', 'Enrolamiento de certificados', st.enrollment if st.enrollment is defined else True, hint='Permite que ATAK e iTAK obtengan su certificado con usuario y contraseña (8446).') }}</div>
+            {{ input('enroll_days', 'Validez de certificados enrolados (días)', st.enroll_days or 365, type='number', attrs='min=1 max=3650') }}
+            <div>{{ check('verify_signature', 'Verificar firma del paquete', hint='Requiere la llave GPG y la política subidas en el paso 1.') }}</div>
+          </div>
+        </fieldset>
+        <div class="field" data-field="package"><span class="err" role="alert"></span></div>
+        <div class="formfoot">
+          <button class="btn primary" type="submit">{{ 'Aplicar configuración' if status.installed else 'Desplegar TAK Server' }}</button>
+          <span class="muted">La instalación tarda entre 10 y 20 minutos. Puedes cerrar esta página: la tarea sigue en el servidor.</span>
+        </div>
+      </form>
+    </section>
+
+    {% if status.installed %}
+    <section class="panel">
+      <h2>Usuarios y paquetes de conexión</h2>
+      <p>Cada usuario recibe un certificado firmado por la CA intermedia. El paquete .zip configura la conexión en ATAK o iTAK al importarlo.</p>
+      <form data-api="/api/m/takserver/users" data-reload>
+        <div class="grid3">
+          {{ input('name', 'Nombre del equipo o usuario', placeholder='alfa-01', hint='Letras, números y guion') }}
+          {{ input('group', 'Grupo TAK (opcional)', placeholder='Equipo Alfa') }}
+          <div class="field"><label>&nbsp;</label><button class="btn" type="submit">Crear certificado</button></div>
+        </div>
+      </form>
+      <div class="grid2">
+        <div class="field">
+          <label for="pkg-host">Dirección del servidor en los paquetes</label>
+          <select id="pkg-host" data-pkg-host>
+            {% for h in hosts %}<option value="{{ h }}">{{ h }}</option>{% endfor %}
+            <option value="">Otra…</option>
+          </select>
+          <span class="hint">Usa la IP ZeroTier si los equipos se conectan por la red superpuesta.</span>
+        </div>
+        <div class="field" data-pkg-custom hidden>
+          <label for="pkg-custom">Otra dirección</label>
+          <input id="pkg-custom" type="text" placeholder="tak.ejemplo.cl">
+        </div>
+      </div>
+      {% if users %}
+      <table class="list">
+        <thead><tr><th>Usuario</th><th>Grupo</th><th>Creado</th><th>Paquete</th></tr></thead>
+        <tbody>
+        {% for u in users %}
+          <tr><td>{{ u.name }}</td><td>{{ u.group or '—' }}</td><td>{{ u.created | datetime }}</td>
+            <td><div class="btnrow">
+              <a class="btn small" data-pkg-user="{{ u.name }}" data-kind="atak" href="#">ATAK</a>
+              <a class="btn small" data-pkg-user="{{ u.name }}" data-kind="itak" href="#">iTAK</a>
+            </div></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty-note">Aún no hay usuarios. Crea uno por equipo o por persona.</p>{% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Registros de TAK Server</h2>
+      <div class="btnrow">
+        <button class="btn small" type="button" data-logs="/api/m/takserver/logs?file=messaging" data-target="tak-logs">Mensajería</button>
+        <button class="btn small" type="button" data-logs="/api/m/takserver/logs?file=api" data-target="tak-logs">API</button>
+      </div>
+      <pre class="logs" id="tak-logs" hidden></pre>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside>
+    {{ job_console(m.key, last_job) }}
+    {% if status.installed %}
+    <section class="panel">
+      <h2>Conexión</h2>
+      {{ readouts(status.endpoints) }}
+      <dl class="facts">
+        <dt>CA intermedia</dt><dd>{{ int_ca or '—' }}</dd>
+        <dt>Enrolamiento</dt><dd>{{ 'activado' if coreconfig and coreconfig.enrollment else 'desactivado' }}</dd>
+        {% if hosts %}<dt>Admin</dt><dd>https://{{ hosts[0] }}:8443</dd>{% endif %}
+      </dl>
+      <div class="btnrow mt">
+        <a class="btn small" href="/m/takserver/download/admin.p12">admin.p12</a>
+        <a class="btn small" href="/m/takserver/download/truststore.p12">Truststore</a>
+        <a class="btn small" href="/m/takserver/download/root-ca.pem">CA raíz</a>
+        <button class="btn small" type="button" data-action="/api/m/takserver/admins">Reaplicar administradores</button>
+      </div>
+      <p class="muted mt">Importa admin.p12 en el navegador (contraseña de certificados) para entrar al puerto 8443.</p>
+    </section>
+    {% if coreconfig %}
+    <section class="panel">
+      <h2>Entradas en CoreConfig</h2>
+      <table class="list">
+        <thead><tr><th>Nombre</th><th>Protocolo</th><th>Puerto</th></tr></thead>
+        <tbody>
+          {% for i in coreconfig.inputs %}<tr><td>{{ i.name }}</td><td>{{ i.protocol }}</td><td class="mono">{{ i.port }}</td></tr>{% endfor %}
+          {% for c in coreconfig.connectors %}<tr><td>{{ c.name }}</td><td>https</td><td class="mono">{{ c.port }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </section>
+    {% endif %}
+    {{ uninstall_panel(m) }}
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

@@ -1,0 +1,31 @@
+name: Pruebas
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    runs-on: ubuntu-22.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.10"
+      - name: Dependencias
+        run: pip install -r requirements.txt pytest pyflakes
+      - name: Binario de MediaMTX para validar la configuración
+        run: |
+          curl -fsSL -o /tmp/mtx.tgz https://github.com/bluenviron/mediamtx/releases/download/v1.21.2/mediamtx_v1.21.2_linux_amd64.tar.gz
+          tar -xzf /tmp/mtx.tgz -C /tmp mediamtx
+      - name: Análisis estático
+        run: |
+          python -m pyflakes takconsole tests wsgi.py
+          shellcheck install.sh scripts/*.sh
+      - name: Pruebas
+        env:
+          MEDIAMTX_BIN: /tmp/mediamtx
+        run: python -m pytest -q

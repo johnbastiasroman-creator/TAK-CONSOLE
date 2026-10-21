@@ -1,0 +1,59 @@
+TAK-CONSOLE
+Licencia: Apache License 2.0 (ver LICENSE)
+
+La consola no incluye el código de los servicios que despliega: los descarga
+(imágenes de contenedores, paquetes del sistema) o usa el paquete que sube el
+operador. Cada componente conserva su licencia. Revisión: 2026-10-20.
+
+Componentes que despliega
+-------------------------
+TAK Server            Paquete .deb que aporta el operador desde tak.gov.
+                      No se distribuye con este proyecto.
+
+MediaMTX 1.21.2       MIT License. https://github.com/bluenviron/mediamtx
+  (bluenviron/mediamtx)
+
+Mumble server 1.6.870 BSD 3-Clause License. https://github.com/mumble-voip/mumble
+  (mumblevoip/mumble-server; imagen Docker oficial bajo BSD 3-Clause,
+   https://github.com/mumble-voip/mumble-docker)
+
+ZeroTier One 1.14.2   Business Source License 1.1 con "Change Date" 2026-01-01 y
+  (zyclonite/zerotier) "Change License" Apache License 2.0. Según el texto de esa
+                      licencia, desde la fecha de cambio la versión 1.14.2 queda
+                      disponible bajo Apache-2.0.
+                      Imagen de contenedor: MIT License, https://github.com/zyclonite/zerotier-docker
+
+                      IMPORTANTE: desde ZeroTier 1.16 el código del controlador
+                      (directorio nonfree/) se publica bajo la "ZeroTier
+                      Source-Available License", que solo permite uso no comercial
+                      y define como uso comercial, entre otros, "any use of the
+                      Software by or for the benefit of a government or military
+                      entity". Por eso esta consola fija el controlador en 1.14.2.
+                      No actualices la imagen a 1.16+ sin revisar esa licencia.
+                      Esto no es asesoría legal: confirma con tu área legal si el
+                      despliegue es para un cliente gubernamental o de defensa.
+
+ZTNET 0.8.5           GNU General Public License v3.0. https://github.com/sinamics/ztnet
+  (sinamics/ztnet)    Se ejecuta como programa independiente en su propio
+                      contenedor; la consola no enlaza ni modifica su código.
+
+PostgreSQL 15         PostgreSQL License. https://www.postgresql.org/about/licence/
+  (postgres:15-alpine)
+
+Caddy 2.11.7          Apache License 2.0. https://github.com/caddyserver/caddy
+
+Componentes incluidos en este repositorio
+-----------------------------------------
+Fuente Barlow         SIL Open Font License 1.1 (takconsole/static/fonts/OFL-Barlow.txt).
+                      https://github.com/jpt/barlow
+
+Dependencias de Python (requirements.txt)
+-----------------------------------------
+Flask, Werkzeug       BSD 3-Clause License
+gunicorn              MIT License
+PyYAML                MIT License
+
+Marcas
+------
+TAK, ATAK, iTAK, WinTAK, ZeroTier, Mumble y demás nombres son marcas de sus
+respectivos titulares. Este proyecto no está afiliado a ellos.

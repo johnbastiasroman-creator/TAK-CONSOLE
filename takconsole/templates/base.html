@@ -1,0 +1,40 @@
+{% from "_macros.html" import led %}<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}{{ app_name }}{% endblock %} · {{ app_name }}</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ app_version }}">
+  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+</head>
+<body>
+<div class="shell">
+  <aside class="rail">
+    <a class="brand" href="/"><strong>{{ app_name }}</strong><span>v{{ app_version }}</span></a>
+    <nav aria-label="Principal">
+      <a href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>Panel</a>
+      <div class="sep"></div>
+      {% for key, mod in modules.items() %}
+      <a href="/m/{{ key }}" {% if request.path == '/m/' ~ key %}aria-current="page"{% endif %}>
+        <span class="led off" data-led="{{ key }}" aria-hidden="true"></span>{{ mod.name }}</a>
+      {% endfor %}
+      <div class="sep"></div>
+      <a href="/red" {% if request.path == '/red' %}aria-current="page"{% endif %}>Red y firewall</a>
+    </nav>
+    <form method="post" action="/logout">
+      <input type="hidden" name="csrf" value="{{ csrf_token }}">
+      <button class="linkbtn" type="submit">Cerrar sesión</button>
+    </form>
+  </aside>
+  <main>
+    {% if current_job %}
+    <div class="banner" role="status">{{ led('warn') }} Tarea en curso: {{ current_job.title }}
+      <a href="{{ ('/m/' ~ current_job.key) if current_job.key in modules else '/red' }}">Ver registro</a></div>
+    {% endif %}
+    {% block content %}{% endblock %}
+  </main>
+</div>
+<script src="{{ url_for('static', filename='app.js') }}?v={{ app_version }}"></script>
+</body>
+</html>

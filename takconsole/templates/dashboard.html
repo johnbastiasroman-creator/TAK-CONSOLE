@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% from "_macros.html" import led, readouts %}
+{% block title %}Panel{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div>
+    <h1>{{ host.hostname }}</h1>
+    <p>{{ host.os }}{% if not host.supported %}. Esta consola está probada en Ubuntu 22.04 LTS.{% endif %}</p>
+  </div>
+  <div class="btnrow">
+    <a class="btn small" href="/red">Política: {{ {'all': 'todas las interfaces', 'zerotier': 'solo ZeroTier', 'zerotier_lan': 'ZeroTier + red local'}[policy.exposure] }}</a>
+  </div>
+</div>
+
+<section class="hoststrip" aria-label="Equipo">
+  <div>
+    <div class="k">Direcciones</div>
+    <div class="ips">
+      {% for itf in host.interfaces %}
+      <div>{{ itf.name }} <b>{{ itf.addresses | join(', ') }}</b>{% if itf.kind == 'zerotier' %} (ZeroTier){% endif %}</div>
+      {% else %}<div>Sin interfaces con IPv4</div>{% endfor %}
+    </div>
+  </div>
+  <div>
+    <div class="k">Memoria</div>
+    {% set mt = host.memory.total or 1 %}{% set mu = mt - host.memory.available %}
+    <div class="v">{{ (mu / 1024) | round(1) }} / {{ (mt / 1024) | round(1) }} GB</div>
+    <meter min="0" max="{{ mt }}" low="{{ mt * 0.7 }}" high="{{ mt * 0.9 }}" optimum="0" value="{{ mu }}"></meter>
+  </div>
+  <div>
+    <div class="k">Disco /</div>
+    {% set dt = host.disk.total or 1 %}{% set du = dt - host.disk.free %}
+    <div class="v">{{ host.disk.free }} GB libres</div>
+    <meter min="0" max="{{ dt }}" low="{{ dt * 0.75 }}" high="{{ dt * 0.9 }}" optimum="0" value="{{ du }}"></meter>
+  </div>
+  <div>
+    <div class="k">Carga ({{ host.cpus }} CPU)</div>
+    <div class="v">{{ host.load[0] }}</div>
+    <meter min="0" max="{{ host.cpus }}" low="{{ host.cpus * 0.7 }}" high="{{ host.cpus * 0.95 }}" optimum="0" value="{{ [host.load[0], host.cpus] | min }}"></meter>
+  </div>
+</section>
+
+<section class="channels" aria-label="Servicios">
+  {% for key, mod in modules.items() %}{% set s = statuses[key] %}
+  <div class="channel" data-status="{{ key }}">
+    {{ led(s.level, big=True) }}
+    <div>
+      <div class="name">{{ mod.name }}<small>{{ mod.summary }}</small></div>
+      <div class="state" data-state-label>{{ s.label }}{% if s.version %}, {{ s.version }}{% endif %}</div>
+    </div>
+    {% if s.endpoints %}{{ readouts(s.endpoints) }}{% else %}<div class="empty-note">Sin desplegar</div>{% endif %}
+    <div class="go"><a class="btn small{% if not s.installed %} primary{% endif %}" href="/m/{{ key }}">{{ 'Administrar' if s.installed else 'Desplegar' }}</a></div>
+  </div>
+  {% endfor %}
+</section>
+
+{% if not (statuses.zerotier.installed and statuses.takserver.installed) %}
+<section class="panel" aria-label="Orden sugerido">
+  <h2>Orden sugerido</h2>
+  <p>Cada paso deja listo lo que usa el siguiente.</p>
+  <ol>
+    <li><a href="/m/zerotier">ZeroTier</a>: crea la red y une este servidor; obtienes la IP por la que llegarán los equipos.</li>
+    <li><a href="/m/takserver">TAK Server</a>: sube el .deb, define la CA y genera los paquetes de conexión con la IP ZeroTier.</li>
+    <li><a href="/m/mediamtx">MediaMTX</a> y <a href="/m/mumble">Mumble</a>: video y voz; pueden usar certificados de la CA de TAK.</li>
+    <li><a href="/red">Red y firewall</a>: limita los servicios a la red ZeroTier si no deben verse en la LAN.</li>
+  </ol>
+</section>
+{% endif %}
+{% endblock %}

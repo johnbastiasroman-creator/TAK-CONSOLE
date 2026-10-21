@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<!-- Muestra sintética con la misma estructura que el CoreConfig.example.xml de TAK Server -->
+<Configuration xmlns="http://bbn.com/marti/xml/config">
+    <network multicastTTL="5" serverId="sample">
+        <input _name="stdssl" protocol="tls" port="8089" coreVersion="2"/>
+        <!-- <input _name="stdtcp" protocol="tcp" port="8087" auth="anonymous"/> -->
+        <connector port="8443" _name="https"/>
+        <connector port="8446" clientAuth="false" _name="cert_https"/>
+    </network>
+    <auth>
+        <File location="UserAuthenticationFile.xml"/>
+    </auth>
+    <submission ignoreStaleMessages="false" validateXml="false"/>
+    <subscription reloadPersistent="false"/>
+    <repository enable="true" numDbConnections="16">
+        <connection url="jdbc:postgresql://127.0.0.1:5432/cot" username="martiuser" password="abc"/>
+    </repository>
+    <repeater enable="true" periodMillis="3000" staleDelayMillis="15000"/>
+    <filter/>
+    <buffer><queue/></buffer>
+    <dissemination smartRetry="false"/>
+    <security>
+        <tls context="TLSv1.2"
+            keymanager="SunX509"
+            keystore="JKS" keystoreFile="certs/files/takserver.jks" keystorePass="atakatak"
+            truststore="JKS" truststoreFile="certs/files/truststore-root.jks" truststorePass="atakatak">
+        </tls>
+        <!--
+        <tls context="TLSv1.2"
+            keystore="JKS" keystoreFile="certs/OLD.jks" keystorePass="atakatak"
+            truststore="JKS" truststoreFile="certs/old-truststore.jks" truststorePass="atakatak">
+        </tls>
+        -->
+    </security>
+    <federation>
+        <federation-server port="9000" v1enabled="false" v2port="9001" v2enabled="true">
+            <tls context="TLSv1.2"
+                keymanager="SunX509"
+                keystore="JKS" keystoreFile="certs/files/takserver.jks" keystorePass="atakatak"
+                truststore="JKS" truststoreFile="certs/files/fed-truststore.jks" truststorePass="atakatak"/>
+        </federation-server>
+    </federation>
+    <!--
+    <certificateSigning CA="TAKServer">
+        <certificateConfig><nameEntries/></certificateConfig>
+        <TAKServerCAConfig keystore="JKS" keystoreFile="certs/files/x.jks" keystorePass="atakatak" validityDays="30" signatureAlg="SHA256WithRSA"/>
+    </certificateSigning>
+    -->
+    <vbm enabled="false"/>
+</Configuration>

@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel %}
+{% block title %}Mumble{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="title">{{ led(status.level, big=True) }}
+    <div><h1>Mumble</h1><p>{{ status.label }}. Voz por canales con pulsar para hablar.</p></div>
+  </div>
+  {{ control_buttons(m, actions, status) }}
+</div>
+
+<div class="module">
+  <div>
+    <section class="panel">
+      <h2>Configuración</h2>
+      <p>Servidor oficial de Mumble. Lo usan el plugin ATAK Vx del TAK Product Center, Mumla en Android y el cliente Mumble de escritorio.</p>
+      <form data-api="/api/m/mumble/deploy" data-reload>
+        <fieldset>
+          <legend>Servidor</legend>
+          <div class="grid2">
+            {{ input('register_name', 'Nombre del canal raíz', p.register_name or 'Red TAK') }}
+            {{ input('max_users', 'Usuarios simultáneos', p.max_users or 100, type='number', attrs='min=2 max=1000') }}
+          </div>
+          {{ input('welcome', 'Mensaje de bienvenida', p.welcome or '', placeholder='Canal de voz del equipo') }}
+        </fieldset>
+        <fieldset>
+          <legend>Acceso</legend>
+          <div class="grid2">
+            {{ input('server_pass', 'Contraseña del servidor', '', type='password', autocomplete='new-password', hint='La piden todos los clientes. Vacía: servidor sin contraseña.') }}
+            {{ input('superuser_pass', 'Contraseña de SuperUser', '', type='password', autocomplete='new-password', hint='Administra canales y permisos. Vacía: se conserva o se genera.') }}
+          </div>
+          {% if status.installed and p.server_pass == '' %}<div class="note"><p>El servidor está abierto: cualquiera que alcance el puerto {{ port }} puede entrar. Define una contraseña o limita la exposición a ZeroTier.</p></div>{% endif %}
+        </fieldset>
+        <fieldset>
+          <legend>Certificado</legend>
+          {{ check('tls', 'Usar certificado firmado por la CA de TAK', p.get('tls', False), hint='Los equipos que ya confían en tu CA de TAK validan también el servidor de voz.' if tak_ca else 'Disponible cuando TAK Server esté desplegado. Sin esto, Mumble usa un certificado autofirmado.') }}
+        </fieldset>
+        <div class="formfoot">
+          <button class="btn primary" type="submit">{{ 'Aplicar configuración' if status.installed else 'Desplegar Mumble' }}</button>
+          <span class="muted">Imagen {{ image }}</span>
+        </div>
+      </form>
+    </section>
+
+    {% if status.installed %}
+    <section class="panel">
+      <h2>Registro del servidor</h2>
+      <button class="btn small" type="button" data-logs="/api/m/mumble/logs" data-target="mumble-logs">Ver registro</button>
+      <pre class="logs" id="mumble-logs" hidden></pre>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside>
+    {{ job_console(m.key, last_job) }}
+    {% if status.installed %}
+    <section class="panel">
+      <h2>Conectar clientes</h2>
+      {{ readouts(status.endpoints) }}
+      {% for h in hosts %}
+      <div class="field mt"><label>Servidor{% if loop.first %} (recomendado){% endif %}</label>
+        <div class="copy"><code>mumble://{{ h }}:{{ port }}</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>
+      {% endfor %}
+      <p class="muted mt">En ATAK Vx agrega un servidor Mumble con esta dirección y puerto. En Mumla o Mumble de escritorio usa la misma dirección; la contraseña es la del servidor.</p>
+      <details class="mt"><summary>Contraseñas actuales</summary>
+        <dl class="facts">
+          <dt>Servidor</dt><dd>{{ p.server_pass or '(sin contraseña)' }}</dd>
+          <dt>SuperUser</dt><dd>{{ p.superuser_pass }}</dd>
+        </dl>
+      </details>
+    </section>
+    {{ uninstall_panel(m) }}
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

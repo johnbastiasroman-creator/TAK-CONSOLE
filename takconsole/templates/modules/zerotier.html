@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel %}
+{% block title %}ZeroTier{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="title">{{ led(status.level, big=True) }}
+    <div><h1>ZeroTier</h1><p>{{ status.label }}. Controlador propio con administración web ZTNET.</p></div>
+  </div>
+  {{ control_buttons(m, actions, status) }}
+</div>
+
+<div class="module">
+  <div>
+    <section class="panel">
+      <h2>{{ 'Controlador y ZTNET' if st.installed else 'Desplegar el controlador' }}</h2>
+      <p>Este equipo será el controlador de tus redes ZeroTier: autoriza nodos, asigna IP y define reglas. ZTNET es la interfaz web para hacerlo.</p>
+      <form data-api="/api/m/zerotier/deploy" data-reload>
+        <div class="grid2">
+          <div class="field" data-field="public_host">
+            <label for="f-public_host">Dirección para abrir ZTNET</label>
+            <select id="f-public_host" name="public_host">
+              {% for h in hosts %}<option value="{{ h }}" {% if h == (st.public_host or lan_ip) %}selected{% endif %}>{{ h }}</option>{% endfor %}
+              {% if st.public_host and st.public_host not in hosts %}<option value="{{ st.public_host }}" selected>{{ st.public_host }}</option>{% endif %}
+            </select>
+            <span class="hint">ZTNET solo acepta inicios de sesión desde esta dirección (https://…:{{ ztnet_port }}).</span>
+            <span class="err" role="alert"></span>
+          </div>
+        </div>
+        <div class="formfoot">
+          <button class="btn primary" type="submit">{{ 'Redesplegar' if st.installed else 'Desplegar ZeroTier' }}</button>
+          {% if st.installed %}<a class="btn" href="{{ st.public_url }}" target="_blank" rel="noopener">Abrir ZTNET</a>{% endif %}
+        </div>
+      </form>
+      {% if st.installed %}
+      <div class="note"><p>El primer usuario que se registra en ZTNET queda como administrador. Créalo apenas termine el despliegue y luego desactiva el registro público en ZTNET (Admin, Settings).</p></div>
+      {% endif %}
+      <details class="mt"><summary>Componentes y licencias</summary>
+        <ul>
+          {% for i in images %}<li><code>{{ i }}</code></li>{% endfor %}
+        </ul>
+        <p class="muted">El controlador se fija en ZeroTier 1.14.2: desde la versión 1.16 el código del controlador usa una licencia no comercial que excluye el uso gubernamental y militar. La 1.14.2 pasó a Apache-2.0 el 2026-01-01 según su licencia BSL. Detalles en NOTICE.</p>
+      </details>
+    </section>
+
+    {% if st.installed %}
+    <section class="panel">
+      <h2>Este servidor en la red</h2>
+      <p>Crea una red en ZTNET y únete con su ID. Si la red es de este controlador, el servidor se autoriza solo.</p>
+      <dl class="facts">
+        <dt>Nodo</dt><dd>{{ info.address or '—' }}</dd>
+        <dt>Versión</dt><dd>{{ info.version or '—' }}</dd>
+        <dt>En línea</dt><dd>{{ 'sí' if info.online else 'no' }}</dd>
+      </dl>
+      <form data-api="/api/m/zerotier/join" data-reload class="mt">
+        <div class="grid2">
+          {{ input('nwid', 'ID de red', placeholder='16 caracteres hexadecimales', attrs='maxlength=16') }}
+          <div>{{ check('authorize', 'Autorizar este servidor en mi controlador', True) }}</div>
+        </div>
+        <div class="formfoot"><button class="btn" type="submit">Unirse a la red</button></div>
+      </form>
+      {% if networks %}
+      <table class="list">
+        <thead><tr><th>Red</th><th>Estado</th><th>Interfaz</th><th>IP</th><th></th></tr></thead>
+        <tbody>
+        {% for n in networks %}
+          <tr><td>{{ n.name or '—' }}<br><span class="mono muted">{{ n.id }}</span></td>
+            <td>{{ n.status }}</td><td class="mono">{{ n.iface or '—' }}</td>
+            <td class="mono">{{ n.addresses | join(', ') or '—' }}</td>
+            <td><form data-api="/api/m/zerotier/leave" data-reload data-confirm="¿Salir de la red {{ n.id }}?"><input type="hidden" name="nwid" value="{{ n.id }}"><button class="btn small" type="submit">Salir</button></form></td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% if networks | selectattr('status', 'equalto', 'ACCESS_DENIED') | list %}
+      <div class="note"><p>ACCESS_DENIED: autoriza el nodo {{ info.address }} en la red desde ZTNET.</p></div>
+      {% endif %}
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Raíces de la red (planet)</h2>
+      <p>Las raíces ayudan a los nodos a encontrarse a través de NAT. Puedes usar las de ZeroTier Inc. o un planet propio.</p>
+      <dl class="facts">
+        <dt>Modo actual</dt><dd>{{ {'publicas': 'Raíces públicas de ZeroTier', 'privada': 'Raíz privada', 'desconocido': 'Sin datos todavía'}[mode] }}</dd>
+        {% for r in roots %}<dt>Raíz</dt><dd>{{ r.address }} {{ r.paths | join(', ') }}</dd>{% endfor %}
+      </dl>
+      <div class="note"><p>Las apps oficiales de ZeroTier para Android e iOS no aceptan un planet propio. Si tus ATAK e iTAK usan esas apps, mantén las raíces públicas.</p></div>
+      <h3 class="mt">Usar una raíz privada</h3>
+      <p class="muted">Genera el planet en ZTNET (Admin, Controller, Generate Planet) indicando la IP pública y el puerto 9993 del equipo que hará de raíz, por ejemplo tu servidor con IP estática. ZTNET lo instala aquí; luego usa «Reiniciar nodo ZeroTier». También puedes subir un planet generado en otro lugar:</p>
+      <form data-upload="/api/m/zerotier/planet" data-reload>
+        <div class="grid2">
+          <div class="field" data-field="planet"><label for="f-planet">Archivo planet</label><input id="f-planet" type="file" name="planet"><span class="err" role="alert"></span></div>
+          <div class="field"><label>&nbsp;</label><button class="btn" type="submit">Aplicar planet</button></div>
+        </div>
+        <div class="progress"><progress max="100" value="0"></progress></div>
+      </form>
+      <div class="btnrow mt">
+        {% if planet_file %}<a class="btn small" href="/m/zerotier/planet">Descargar planet actual</a>{% endif %}
+        <button class="btn small" type="button" data-action="/api/m/zerotier/planet/reset" data-confirm="¿Volver a las raíces públicas de ZeroTier? Los clientes con planet privado deberán restaurar el suyo.">Restaurar raíces públicas</button>
+      </div>
+      <p class="muted mt">Cada cliente con planet privado necesita el archivo en su carpeta de ZeroTier (Linux: /var/lib/zerotier-one/planet; Windows: %PROGRAMDATA%\ZeroTier\One\planet) y reiniciar el servicio.</p>
+    </section>
+
+    <section class="panel">
+      <h2>Registros</h2>
+      <div class="btnrow">
+        <button class="btn small" type="button" data-logs="/api/m/zerotier/logs?c=zerotier" data-target="zt-logs">ZeroTier</button>
+        <button class="btn small" type="button" data-logs="/api/m/zerotier/logs?c=ztnet" data-target="zt-logs">ZTNET</button>
+        <button class="btn small" type="button" data-logs="/api/m/zerotier/logs?c=https" data-target="zt-logs">HTTPS</button>
+        <button class="btn small" type="button" data-logs="/api/m/zerotier/logs?c=postgres" data-target="zt-logs">Base de datos</button>
+      </div>
+      <pre class="logs" id="zt-logs" hidden></pre>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside>
+    {{ job_console(m.key, last_job) }}
+    {% if st.installed %}
+    <section class="panel">
+      <h2>Estado</h2>
+      {{ readouts(status.endpoints) }}
+    </section>
+    {{ uninstall_panel(m) }}
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}

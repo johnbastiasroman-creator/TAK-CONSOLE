@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% from "_macros.html" import led, input, job_console %}
+{% block title %}Red y firewall{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="title">{{ led('ok' if fw.active else ('warn' if fw.installed else 'err'), big=True) }}
+    <div><h1>Red y firewall</h1>
+      <p>UFW {{ 'activo' if fw.active else ('instalado pero inactivo' if fw.installed else 'no instalado') }}.</p></div>
+  </div>
+</div>
+
+<div class="module">
+  <div>
+    <section class="panel">
+      <h2>Exposición de los servicios</h2>
+      <p>Decide por dónde se puede llegar a TAK Server, MediaMTX, Mumble y ZTNET. SSH (puerto {{ ssh_ports | join(', ') }}), la consola ({{ console_port }}) y el transporte de ZeroTier (9993/udp) quedan siempre abiertos.</p>
+      <form data-api="/api/red/policy" data-reload>
+        <div class="field" data-field="exposure">
+          <label class="check"><input type="radio" name="exposure" value="all" {% if policy.exposure == 'all' %}checked{% endif %}>
+            <span>Todas las interfaces<small>LAN, ZeroTier e internet si el equipo tiene IP pública.</small></span></label>
+          <label class="check"><input type="radio" name="exposure" value="zerotier" {% if policy.exposure == 'zerotier' %}checked{% endif %}>
+            <span>Solo ZeroTier<small>Los servicios solo responden por las interfaces zt*. Recomendado en terreno.</small></span></label>
+          <label class="check"><input type="radio" name="exposure" value="zerotier_lan" {% if policy.exposure == 'zerotier_lan' %}checked{% endif %}>
+            <span>ZeroTier y una red local<small>Para equipos conectados por cable o Wi-Fi en el mismo sitio.</small></span></label>
+          <span class="err" role="alert"></span>
+        </div>
+        <div class="grid2">
+          {{ input('lan_cidr', 'Red local (CIDR)', policy.lan_cidr, placeholder='192.168.1.0/24') }}
+        </div>
+        {% if policy.exposure != 'all' and not zt_ifaces %}
+        <div class="note bad"><p>Aún no hay interfaces ZeroTier. Une este servidor a una red desde <a href="/m/zerotier">ZeroTier</a>; hasta entonces los servicios no serán accesibles con esta política.</p></div>
+        {% endif %}
+        <div class="formfoot">
+          <button class="btn primary" type="submit">Aplicar política</button>
+          <span class="muted">Interfaces ZeroTier: {{ zt_ifaces | join(', ') or 'ninguna' }}</span>
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Puertos por servicio</h2>
+      {% if planned %}
+      <table class="list">
+        <thead><tr><th>Servicio</th><th>Puerto</th><th>Uso</th></tr></thead>
+        <tbody>
+        {% for g in planned %}{% for p in g.ports %}
+          <tr><td>{{ g.module }}</td><td class="mono">{{ p.port }}/{{ p.proto }}</td><td>{{ p.label }}{% if p.always %} <span class="muted">(siempre abierto)</span>{% endif %}</td></tr>
+        {% endfor %}{% endfor %}
+        </tbody>
+      </table>
+      {% else %}<p class="empty-note">No hay servicios desplegados.</p>{% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Interfaces</h2>
+      <table class="list">
+        <thead><tr><th>Interfaz</th><th>Tipo</th><th>IPv4</th></tr></thead>
+        <tbody>
+        {% for i in host.interfaces %}
+          <tr><td class="mono">{{ i.name }}</td><td>{{ 'ZeroTier' if i.kind == 'zerotier' else 'LAN' }}</td><td class="mono">{{ i.addresses | join(', ') }}</td></tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+  </div>
+
+  <aside>
+    {{ job_console('network', last_job) }}
+    <section class="panel">
+      <h2>Firewall UFW</h2>
+      {% if fw.installed and not fw.active %}
+      <p>UFW está instalado pero no filtra tráfico. Al activarlo se permiten primero SSH y la consola.</p>
+      <button class="btn primary small" type="button" data-action="/api/red/ufw-enable" data-confirm="¿Activar UFW? Se permitirán SSH ({{ ssh_ports | join(', ') }}) y la consola ({{ console_port }}) antes de activarlo.">Activar UFW</button>
+      {% elif fw.active %}
+      <p>Activo. Las reglas de la consola llevan el comentario <code>tak-console:&lt;servicio&gt;</code>; puedes verlas con <code>sudo ufw status numbered</code>.</p>
+      {% else %}
+      <p>UFW no está instalado. Ejecuta de nuevo <code>sudo ./install.sh</code>.</p>
+      {% endif %}
+    </section>
+    <section class="panel">
+      <h2>Certificado de la consola</h2>
+      <p>Autofirmado. Regenéralo después de unirte a ZeroTier para que incluya la nueva IP.</p>
+      <div class="btnrow">
+        <button class="btn small" type="button" data-action="/api/red/console-cert">Regenerar</button>
+        <a class="btn small" href="/m/network/console.crt">Descargar</a>
+      </div>
+    </section>
+  </aside>
+</div>
+{% endblock %}
