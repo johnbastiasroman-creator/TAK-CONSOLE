@@ -85,3 +85,32 @@ def test_policy_validation(client):
 def test_package_route_rejects_bad_names(client):
     assert client.get("/m/takserver/package/..%2Fetc?host=1.2.3.4").status_code == 404
     assert client.get("/m/takserver/download/../../etc/passwd").status_code == 404
+
+
+def _pagina_mediamtx(client, params):
+    from takconsole.core import settings
+    settings.update_section("mediamtx", {"installed": True, "params": params})
+    r = client.get("/m/mediamtx")
+    assert r.status_code == 200
+    return r.get_data(as_text=True)
+
+
+def test_pagina_mediamtx_sin_auth_no_muestra_credenciales(client):
+    html = _pagina_mediamtx(client, {"rtsp": True, "srt": True, "rtmp": True, "hls": True,
+                                     "auth": False, "publish_user": "", "publish_pass": "",
+                                     "read_user": "", "read_pass": ""})
+    assert "rtsp://" in html and "CLAVE" not in html
+    assert "Credenciales actuales" not in html
+    assert "streamid=publish:camara1&amp;pkt_size=1316" in html
+    assert 'name="auth"' in html
+    assert 'name="auth" value="1" checked' not in html
+
+
+def test_pagina_mediamtx_instalacion_anterior_conserva_credenciales(client):
+    # estado guardado por la versión 0.1.0: sin la clave «auth», con credenciales
+    html = _pagina_mediamtx(client, {"rtsp": True, "publish_user": "publicador",
+                                     "publish_pass": "pub-pass-123", "anonymous_read": False,
+                                     "read_user": "visor", "read_pass": "read-pass-123"})
+    assert "rtsp://publicador:CLAVE@" in html
+    assert "Credenciales actuales" in html and "pub-pass-123" in html
+    assert 'name="auth" value="1" checked' in html

@@ -4,25 +4,27 @@
 Pasos verificados contra los scripts oficiales del repositorio
 TAK-Product-Center/Server (makeRootCa.sh, makeCert.sh, cert-metadata.sh,
 CoreConfig.example.xml/CoreConfig.xsd) y las dependencias declaradas del .deb
-(openjdk-17-jdk, postgresql-15, postgresql-15-postgis-3, openssl).
+(openjdk-17-jdk, openssl y PostgreSQL con PostGIS: en 5.8-RELEASE92 es
+postgresql-18, que Ubuntu 22.04 no trae y se instala desde el repositorio PGDG).
 """
 import glob
 import io
 import os
 import re
 import shutil
+import tarfile
 import time
 import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-from flask import abort, jsonify, request, send_file
+from flask import abort, jsonify, request, send_file, session
 from werkzeug.utils import secure_filename
 
 from .. import config
-from ..core import system, validate
+from ..core import auth, settings, system, validate
 from ..core.jobs import JOBS, Busy, JobFailed
-from ..core.shell import capture, run
+from ..core.shell import CommandError, capture, run, which
 from . import takserver_files as tf
 from .base import Module
 
@@ -39,11 +41,125 @@ PGDG_LIST = Path("/etc/apt/sources.list.d/pgdg.list")
 STREAM_PORT = 8089
 TOTAL_STEPS = 10
 
+# apt verifica las firmas como el usuario sin privilegios «_apt». Solo se corrigen
+# permisos de directorios que cuelgan de estas raíces (nunca las raíces mismas).
+APT_SAFE_ROOTS = (Path("/usr/share"), Path("/etc/apt"), Path("/usr/local/share"))
+PGP_ARMOR_HEADER = b"-----BEGIN PGP PUBLIC KEY BLOCK-----"
+
+# Borrado de datos (después de desinstalar). Valores de TAK Server 5.8: base «cot» y rol
+# «martiuser»; el nombre real se lee de CoreConfig.xml antes de borrar.
+PURGE_PHRASE = "BORRAR DATOS"
+DB_DEFAULTS = {"name": "cot", "role": "martiuser", "port": 5432}
+PG_IDENT = re.compile(r"[A-Za-z_][A-Za-z0-9_]{0,62}")
+PG_PROTECTED_DBS = {"postgres", "template0", "template1"}
+PG_PROTECTED_ROLES = {"postgres"}
+# Qué se guarda en el respaldo: certificados y configuración (no la base de datos).
+BACKUP_ITEMS = ("certs", "CoreConfig*.xml*", "UserAuthenticationFile.xml*",
+                "TAKIgniteConfig.xml*", "conf")
+# Estado de la consola que deja de ser válido al borrar los datos.
+STATE_RESET = ("installed", "int_ca", "version", "deployed_at", "cert_pass", "users",
+               "package", "package_version")
+SIGNED_BY = re.compile(r"signed-by=([^\s\]]+)|^Signed-By:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+
 
 def _upload_dir() -> Path:
     d = config.UPLOAD_DIR / "takserver"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def signed_by_path(text: str):
+    """Ruta de la llave que declara un archivo de fuentes apt (una línea o deb822)."""
+    for m in SIGNED_BY.finditer(text):
+        value = m.group(1) or m.group(2)
+        if value and value.startswith("/"):
+            return Path(value)
+    return None
+
+
+def make_apt_readable(path: Path) -> list:
+    """Deja `path` y sus directorios legibles por «_apt»; devuelve los directorios corregidos.
+
+    El servicio de la consola corre con UMask=0077: un `mkdir(parents=True)` crea
+    /usr/share/postgresql-common con modo 0700 y apt, que no es root, no puede abrir la
+    llave (lo reporta como NO_PUBKEY). Solo se AGREGAN permisos de lectura/entrada.
+    """
+    path = Path(path)
+    changed = []
+    if path.is_file():
+        os.chmod(path, (path.stat().st_mode & 0o7777) | 0o044)
+    for d in path.parents:
+        if not any(root in d.parents for root in APT_SAFE_ROOTS):
+            break
+        st = d.stat()
+        if st.st_uid != 0:
+            continue
+        mode = st.st_mode & 0o7777
+        if mode & 0o055 != 0o055:
+            os.chmod(d, mode | 0o055)
+            changed.append(d)
+    return changed
+
+
+def apt_can_read(path: Path) -> bool:
+    """¿Puede el usuario «_apt» leer `path`? (sin usuario _apt, apt verifica como root)."""
+    if config.DRY_RUN or not capture(["id", "_apt"]).ok:
+        return True
+    return capture(["runuser", "-u", "_apt", "--", "test", "-r", str(path)]).ok
+
+
+def key_is_present(path: Path, armored: bool = True) -> bool:
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        return path.read_bytes().lstrip().startswith(PGP_ARMOR_HEADER) if armored else True
+    except OSError:
+        return False
+
+
+def fetch_pgdg_key(dest: Path) -> None:
+    """Descarga la llave del repositorio PGDG y la escribe de forma atómica y legible."""
+    try:
+        with urllib.request.urlopen(PGDG_KEY_URL, timeout=60) as resp:
+            data = resp.read()
+    except OSError as e:
+        raise JobFailed(f"No se pudo descargar la llave de PGDG ({e}). "
+                        "Comprueba la salida a internet hacia www.postgresql.org") from e
+    if not data.lstrip().startswith(PGP_ARMOR_HEADER):
+        raise JobFailed("La respuesta de postgresql.org no es una llave PGP válida")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    tmp.write_bytes(data)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, dest)
+
+
+def coreconfig_db(text: str) -> dict:
+    """Base, rol y puerto de PostgreSQL declarados en CoreConfig.xml (con valores por defecto)."""
+    info = dict(DB_DEFAULTS)
+    for tag in re.finditer(r"<connection\b[^>]*>", text):
+        node = tag.group(0)
+        url = re.search(r'\burl="jdbc:postgresql://[^/":]+(?::(\d+))?/([^"?]+)', node)
+        if not url:
+            continue
+        if url.group(1):
+            info["port"] = int(url.group(1))
+        info["name"] = url.group(2)
+        user = re.search(r'\busername="([^"]*)"', node)
+        if user:
+            info["role"] = user.group(1)
+        break
+    return info
+
+
+def check_db_info(info: dict) -> None:
+    """Rechaza nombres que no sean identificadores simples o que sean de PostgreSQL mismo."""
+    if not PG_IDENT.fullmatch(info["name"]) or info["name"].lower() in PG_PROTECTED_DBS:
+        raise ValueError(f"base de datos «{info['name']}»")
+    if not PG_IDENT.fullmatch(info["role"]) or info["role"].lower() in PG_PROTECTED_ROLES:
+        raise ValueError(f"rol «{info['role']}»")
+    if not 1 <= int(info["port"]) <= 65535:
+        raise ValueError(f"puerto {info['port']}")
 
 
 class TakServer(Module):
@@ -109,6 +225,7 @@ class TakServer(Module):
     def page_context(self):
         st = self.state()
         pkg = st.get("package")
+        pkg_installed = bool(self.package_version())
         summary = None
         if CORECONFIG.exists():
             try:
@@ -126,6 +243,8 @@ class TakServer(Module):
             "coreconfig": summary,
             "supported_os": system.is_ubuntu_2204(),
             "os_label": system.os_label(),
+            "purge": None if pkg_installed else self.purge_overview(),
+            "purge_phrase": PURGE_PHRASE,
         }
 
     # ── validación ──────────────────────────────────────────────────────────
@@ -264,20 +383,42 @@ class TakServer(Module):
                     if "apt.postgresql.org" in Path(p).read_text(errors="ignore")]
         if existing:
             job.ok(f"Repositorio PGDG ya presente ({os.path.basename(existing[0])})")
+            key = signed_by_path(Path(existing[0]).read_text(errors="ignore"))
         else:
             job.log(f"Descargando llave {PGDG_KEY_URL}")
-            PGDG_KEY.parent.mkdir(parents=True, exist_ok=True)
-            os.chmod(PGDG_KEY.parent, 0o755)
-            with urllib.request.urlopen(PGDG_KEY_URL, timeout=60) as resp:
-                PGDG_KEY.write_bytes(resp.read())
+            fetch_pgdg_key(PGDG_KEY)
             code = system.codename() or "jammy"
             PGDG_LIST.write_text(f"deb [signed-by={PGDG_KEY}] "
                                  f"https://apt.postgresql.org/pub/repos/apt {code}-pgdg main\n")
-            # apt verifica las firmas como el usuario _apt: la llave debe ser legible.
-            os.chmod(PGDG_KEY, 0o644)
             os.chmod(PGDG_LIST, 0o644)
             job.ok(f"Repositorio PGDG agregado para {code}")
+            key = PGDG_KEY
+        # Con o sin pgdg.list previo: la llave debe existir y apt (_apt) debe poder leerla.
+        # (No se cambia el umask del proceso: es global y la consola atiende otras peticiones.)
+        if key:
+            self._pgdg_key_ready(job, key)
         run(["apt-get", "update", "-o", "DPkg::Lock::Timeout=600"], log=job.log, timeout=900)
+
+    def _pgdg_key_ready(self, job, key: Path):
+        """Garantiza que la llave declarada existe y que «_apt» puede leerla.
+
+        Un archivo pgdg.list «ya presente» no basta: si la llave falta, está vacía o
+        está en un directorio 0700, apt falla con NO_PUBKEY aunque la llave sea correcta.
+        """
+        ours = key == PGDG_KEY
+        if not key_is_present(key, armored=ours):
+            if not ours:
+                raise JobFailed(f"El repositorio PGDG declara la llave {key}, pero no existe "
+                                "o está vacía. Corrige o elimina esa entrada de apt.")
+            job.warn("La llave de PGDG falta o está vacía; se descarga de nuevo")
+            fetch_pgdg_key(key)
+        changed = make_apt_readable(key)
+        if changed:
+            job.ok("Permisos corregidos para que apt lea la llave: "
+                   + ", ".join(str(d) for d in changed))
+        if not apt_can_read(key):
+            raise JobFailed(f"El usuario _apt no puede leer {key}; apt lo reportaría como "
+                            "NO_PUBKEY. Revisa los permisos de sus directorios.")
 
     def _verify(self, job, pkg, wanted):
         st = self.state()
@@ -448,7 +589,158 @@ class TakServer(Module):
         self.remove_firewall(log=job.log)
         self.save_state(installed=False)
         job.warn("Se conservan /opt/tak (certificados, CoreConfig) y la base de datos «cot» "
-                 "de PostgreSQL. Bórralos manualmente solo si ya no los necesitas.")
+                 "de PostgreSQL. Si ya no los necesitas, usa «Borrar datos de TAK Server» "
+                 "en esta página.")
+
+    # ── borrado de datos (después de desinstalar) ───────────────────────────
+    def tak_db(self) -> dict:
+        """Base, rol y puerto de PostgreSQL según CoreConfig.xml (o los valores de TAK Server)."""
+        try:
+            return coreconfig_db(CORECONFIG.read_text(encoding="utf-8"))
+        except OSError:
+            return dict(DB_DEFAULTS)
+
+    def _psql(self, info, sql, *, job=None, check=True):
+        """Ejecuta una sentencia como el usuario «postgres» por el socket local."""
+        argv = ["runuser", "-u", "postgres", "--", "psql", "-X", "-v", "ON_ERROR_STOP=1",
+                "-p", str(info["port"]), "-d", "postgres", "-c", sql]
+        return run(argv, log=job.log if job else None, check=check, timeout=120)
+
+    def db_exists(self, info) -> bool:
+        if not which("psql"):
+            return False
+        res = capture(["runuser", "-u", "postgres", "--", "psql", "-X", "-tA",
+                       "-p", str(info["port"]), "-d", "postgres", "-c",
+                       f"SELECT 1 FROM pg_database WHERE datname = '{info['name']}'"])
+        return res.ok and res.output.strip() == "1"
+
+    def purge_blockers(self) -> list:
+        """Motivos por los que NO se puede borrar ahora (lista vacía = se puede)."""
+        out = []
+        if self.package_version():
+            out.append("TAK Server sigue instalado: desinstálalo primero.")
+        if capture(["systemctl", "is-active", "takserver"]).output.strip() in ("active", "activating"):
+            out.append("El servicio takserver sigue en marcha.")
+        ports = system.listening_ports()
+        busy = [str(n) for n in (STREAM_PORT, 8443, 8446) if (n, "tcp") in ports]
+        if busy:
+            out.append("Hay algo escuchando en los puertos " + ", ".join(busy) + "/tcp.")
+        if TAK_HOME.is_symlink():
+            out.append(f"{TAK_HOME} es un enlace simbólico: bórralo a mano.")
+        return out
+
+    def purge_overview(self) -> dict:
+        info = self.tak_db()
+        try:
+            check_db_info(info)
+            db_ok = True
+        except ValueError:
+            db_ok = False
+        size = None
+        if TAK_HOME.exists():
+            res = capture(["du", "-sm", str(TAK_HOME)])
+            if res.ok and res.output.split():
+                size = res.output.split()[0]
+        uploads = sorted(f.name for f in _upload_dir().iterdir()
+                         if f.suffix in (".deb", ".key", ".pol")) if config.UPLOAD_DIR.exists() else []
+        return {"files": TAK_HOME.exists(), "size_mb": size, "db": info, "db_ok": db_ok,
+                "db_exists": db_ok and self.db_exists(info), "uploads": uploads,
+                "home": str(TAK_HOME)}
+
+    def view_purge(self):
+        if not auth.verify(session.get("user", ""), request.form.get("password", "")):
+            return jsonify(ok=False, error="Contraseña de la consola incorrecta"), 403
+        if request.form.get("confirm", "").strip() != PURGE_PHRASE:
+            return jsonify(ok=False, error=f"Escribe exactamente «{PURGE_PHRASE}» para confirmar"), 400
+        blockers = self.purge_blockers()
+        if blockers:
+            return jsonify(ok=False, error=" ".join(blockers)), 409
+        f = validate.Form(request.form)
+        backup, uploads = f.boolean("backup"), f.boolean("uploads")
+        try:
+            JOBS.start(self.key, "Borrar datos de TAK Server", self._purge, backup, uploads)
+        except Busy as e:
+            return jsonify(ok=False, error=str(e)), 409
+        return jsonify(ok=True)
+
+    def _backup(self, job) -> Path:
+        dest_dir = config.DATA_DIR / "backups"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(dest_dir, 0o700)
+        dest = dest_dir / f"takserver-{datetime.now().strftime('%Y%m%d-%H%M%S')}.tar.gz"
+        items = []
+        for pattern in BACKUP_ITEMS:
+            items += sorted(glob.glob(str(TAK_HOME / pattern)))
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as raw, tarfile.open(fileobj=raw, mode="w:gz") as tar:
+            for item in items:
+                tar.add(item, arcname="tak/" + os.path.relpath(item, TAK_HOME))
+        job.ok(f"Respaldo de {len(items)} elementos en {dest} (contiene llaves privadas)")
+        return dest
+
+    def _purge(self, job, backup=True, uploads=False):
+        total = 4
+        job.step(1, total, "Comprobaciones")
+        blockers = self.purge_blockers()
+        if blockers:
+            raise JobFailed(" ".join(blockers))
+        info = self.tak_db()
+        try:
+            check_db_info(info)
+        except ValueError as e:
+            raise JobFailed(f"No borro la {e}: no parece una base de TAK Server. "
+                            "Hazlo a mano si es lo que quieres.")
+        job.ok(f"TAK Server no está instalado ni en marcha. Base «{info['name']}», rol «{info['role']}»")
+        if config.DRY_RUN:
+            job.warn("Modo de prueba (DRY_RUN): no se borra nada.")
+            return
+
+        job.step(2, total, "Respaldo")
+        if not backup:
+            job.log("Respaldo omitido")
+        elif TAK_HOME.exists():
+            self._backup(job)
+        else:
+            job.log(f"{TAK_HOME} no existe: nada que respaldar")
+
+        job.step(3, total, "Base de datos")
+        if not which("psql"):
+            job.warn("PostgreSQL no está instalado: no hay base que borrar")
+        else:
+            try:
+                self._psql(info, f'DROP DATABASE IF EXISTS "{info["name"]}" WITH (FORCE)', job=job)
+            except CommandError as e:
+                raise JobFailed(f"No se pudo borrar la base «{info['name']}»: {e}")
+            job.ok(f"Base «{info['name']}» borrada")
+            try:
+                self._psql(info, f'DROP ROLE IF EXISTS "{info["role"]}"', job=job)
+                job.ok(f"Rol «{info['role']}» borrado")
+            except CommandError as e:
+                job.warn(f"No se pudo borrar el rol «{info['role']}» (puede tener otros objetos): {e}")
+
+        job.step(4, total, "Archivos")
+        if TAK_HOME.is_symlink() or len(TAK_HOME.resolve().parts) < 3:
+            raise JobFailed(f"Ruta no segura para borrar: {TAK_HOME}")
+        if TAK_HOME.exists():
+            shutil.rmtree(TAK_HOME)
+            job.ok(f"{TAK_HOME} borrado")
+        else:
+            job.log(f"{TAK_HOME} ya no existe")
+        reset = set(STATE_RESET)
+        if uploads:
+            for f in _upload_dir().iterdir():
+                if f.suffix in (".deb", ".key", ".pol"):
+                    f.unlink()
+            reset |= {"gpg_key", "policy"}
+            job.ok("Paquete .deb, llave y política subidos: borrados")
+        st = {k: v for k, v in self.state().items() if k not in reset}
+        st["installed"] = False
+        settings.replace_section(self.key, st)
+        job.ok("Estado de la consola restablecido")
+        job.warn("No se restauraron los respaldos de pg_hba.conf y postgresql.conf que dejó TAK Server "
+                 "(*.backup-<fecha>). Los certificados que otros módulos firmaron con la CA borrada "
+                 "(Mumble, RTSPS de MediaMTX) no se podrán renovar con ella: vuelve a desplegarlos "
+                 "tras la nueva instalación.")
 
     # ── rutas adicionales ───────────────────────────────────────────────────
     def routes(self):
@@ -456,6 +748,7 @@ class TakServer(Module):
             ("/api/m/takserver/upload", "tak_upload", self.view_upload, ["POST"]),
             ("/api/m/takserver/users", "tak_user_create", self.view_user_create, ["POST"]),
             ("/api/m/takserver/admins", "tak_admins", self.view_admins, ["POST"]),
+            ("/api/m/takserver/purge", "tak_purge", self.view_purge, ["POST"]),
             ("/api/m/takserver/logs", "tak_logs", self.view_logs, ["GET"]),
             ("/m/takserver/download/<what>", "tak_download", self.view_download, ["GET"]),
             ("/m/takserver/package/<user>", "tak_package", self.view_package, ["GET"]),

@@ -4,6 +4,10 @@
 Imagen oficial bluenviron/mediamtx en red de host (UFW controla los puertos y
 RTSP/UDP recibe las direcciones reales). La configuración se genera completa
 en mediamtx.yml y se valida con `mediamtx --validate-conf` antes de arrancar.
+
+Por defecto no se pide usuario ni contraseña ni para publicar ni para ver (usuario
+«any» de MediaMTX). La autenticación con usuarios separados de publicación y lectura
+sigue disponible marcando «Exigir usuario y contraseña».
 """
 import json
 import re
@@ -37,17 +41,28 @@ def stack_dir():
 
 
 def build_config(p, tls=False) -> dict:
-    """Configuración completa de MediaMTX a partir de los parámetros del formulario."""
-    users = [{
-        "user": p["publish_user"], "pass": p["publish_pass"], "ips": [],
-        "permissions": [{"action": "publish"}, {"action": "read"}, {"action": "playback"}],
-    }]
-    if p["anonymous_read"]:
-        users.append({"user": "any", "pass": "", "ips": [],
-                      "permissions": [{"action": "read"}, {"action": "playback"}]})
+    """Configuración completa de MediaMTX a partir de los parámetros del formulario.
+
+    Sin `auth` (valor por defecto del formulario) nadie necesita usuario ni contraseña
+    para publicar ni para ver: es el usuario «any» de MediaMTX («cualquier usuario,
+    incluso anónimo», sin restricción de IP), igual que su configuración por defecto.
+    Si falta la clave `auth` se exige autenticación (falla hacia lo seguro).
+    """
+    if p.get("auth", True):
+        users = [{
+            "user": p["publish_user"], "pass": p["publish_pass"], "ips": [],
+            "permissions": [{"action": "publish"}, {"action": "read"}, {"action": "playback"}],
+        }]
+        if p["anonymous_read"]:
+            users.append({"user": "any", "pass": "", "ips": [],
+                          "permissions": [{"action": "read"}, {"action": "playback"}]})
+        else:
+            users.append({"user": p["read_user"], "pass": p["read_pass"], "ips": [],
+                          "permissions": [{"action": "read"}, {"action": "playback"}]})
     else:
-        users.append({"user": p["read_user"], "pass": p["read_pass"], "ips": [],
-                      "permissions": [{"action": "read"}, {"action": "playback"}]})
+        users = [{"user": "any", "pass": "", "ips": [],
+                  "permissions": [{"action": "publish"}, {"action": "read"},
+                                  {"action": "playback"}]}]
     # API, métricas y pprof solo desde el propio equipo (la consola lee el estado).
     users.append({"user": "any", "pass": "", "ips": ["127.0.0.1", "::1"],
                   "permissions": [{"action": "api"}, {"action": "metrics"}, {"action": "pprof"}]})
@@ -161,22 +176,29 @@ class MediaMTX(Module):
         f = validate.Form(data)
         prev = self.state().get("params", {})
         p = {k: f.boolean(k) for k in PROTOCOLS}
-        p["publish_user"] = f.text("publish_user", validate.USERNAME, validate.USERNAME_MSG,
-                                   default="publicador")
-        p["publish_pass"] = f.raw("publish_pass") or prev.get("publish_pass") or \
-            validate.random_password(20)
-        p["anonymous_read"] = f.boolean("anonymous_read")
-        p["read_user"] = f.text("read_user", validate.USERNAME, validate.USERNAME_MSG,
-                                default="visor", required=not p["anonymous_read"])
-        p["read_pass"] = f.raw("read_pass") or prev.get("read_pass") or validate.random_password(20)
+        # Por defecto SIN usuario ni contraseña, para publicar y para ver.
+        p["auth"] = f.boolean("auth")
+        if p["auth"]:
+            p["publish_user"] = f.text("publish_user", validate.USERNAME, validate.USERNAME_MSG,
+                                       default="publicador")
+            p["publish_pass"] = f.raw("publish_pass") or prev.get("publish_pass") or \
+                validate.random_password(20)
+            p["anonymous_read"] = f.boolean("anonymous_read")
+            p["read_user"] = f.text("read_user", validate.USERNAME, validate.USERNAME_MSG,
+                                    default="visor", required=not p["anonymous_read"])
+            p["read_pass"] = f.raw("read_pass") or prev.get("read_pass") or \
+                validate.random_password(20)
+            for k in ("publish_pass", "read_pass"):
+                if not re.fullmatch(validate.SERVICE_PASS, p[k]):
+                    f.error(k, validate.SERVICE_PASS_MSG)
+            if p["publish_user"] == p["read_user"] and not p["anonymous_read"]:
+                f.error("read_user", "Usa un usuario distinto al de publicación")
+        else:
+            p.update(publish_user="", publish_pass="", read_user="", read_pass="",
+                     anonymous_read=False)
         p["record"] = f.boolean("record")
         p["record_days"] = f.integer("record_days", 1, 365, 7)
         p["tls"] = f.boolean("tls")
-        for k in ("publish_pass", "read_pass"):
-            if not re.fullmatch(validate.SERVICE_PASS, p[k]):
-                f.error(k, validate.SERVICE_PASS_MSG)
-        if p["publish_user"] == p["read_user"] and not p["anonymous_read"]:
-            f.error("read_user", "Usa un usuario distinto al de publicación")
         if not any(p[k] for k in PROTOCOLS):
             f.error("rtsp", "Activa al menos un protocolo")
         if p["tls"] and not certs.tak_ca_available():
@@ -210,6 +232,10 @@ class MediaMTX(Module):
                              "# Generado por la consola\n" + yaml.safe_dump(cfg, sort_keys=False))
         docker.write_compose(d, compose_data())
         job.ok("mediamtx.yml y compose.yaml escritos")
+        if not p.get("auth"):
+            job.warn("Sin autenticación: quien llegue a los puertos activos puede publicar y ver "
+                     "video sin usuario ni contraseña. Limita la exposición con el firewall "
+                     "(por ejemplo, solo ZeroTier o la LAN).")
 
         job.step(4, total, "Contenedor")
         docker.compose(d, "pull", log=job.log)
