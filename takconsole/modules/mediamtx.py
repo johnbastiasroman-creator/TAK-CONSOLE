@@ -11,13 +11,14 @@ sigue disponible marcando «Exigir usuario y contraseña».
 """
 import json
 import re
+import time
 import urllib.request
 
 import yaml
 from flask import jsonify
 
 from .. import config
-from ..core import certs, docker, settings, system, validate
+from ..core import certs, docker, monitor, settings, system, validate
 from ..core.jobs import JobFailed
 from ..core.shell import run
 from .base import Module
@@ -35,9 +36,34 @@ PROTOCOLS = {
 }
 RTSPS_PORT = ("8322", "tcp")
 
+# Conexiones y sesiones que expone la API de MediaMTX 1.21.2 (api/openapi.yaml de esa versión).
+CLIENT_ENDPOINTS = [("RTSP", "/v3/rtsp/sessions/list"), ("RTSPS", "/v3/rtsps/sessions/list"),
+                    ("RTMP", "/v3/rtmp/conns/list"), ("RTMPS", "/v3/rtmps/conns/list"),
+                    ("SRT", "/v3/srt/conns/list"), ("WebRTC", "/v3/webrtc/sessions/list"),
+                    ("HLS", "/v3/hls/sessions/list")]
+STATE_LABEL = {"publish": "Publica", "read": "Lee", "idle": "Conectado"}
+
+# Formato de línea (internal/logger): «2026/10/26 14:21:17 INF [RTSP] [conn 1.2.3.4:5] opened».
+LOG_LEVEL = re.compile(r"^\d{4}/\d\d/\d\d \d\d:\d\d:\d\d (ERR|WAR|INF|DEB)\b")
+_PROTO = r"\[(?:RTSPS?|RTMPS?|SRT|WebRTC|HLS|MoQ)\]"
+EVENT_RULES = [
+    (re.compile(r"authentication failed|unauthorized", re.I), "err", "CLAVE RECHAZADA"),
+    (re.compile(r"is publishing to path"), "ok", "PUBLICA"),
+    (re.compile(r"is reading from path"), "info", "LEE"),
+    (re.compile(r"stream is available"), "ok", "STREAM ACTIVO"),
+    (re.compile(r"closing existing publisher"), "warn", "REEMPLAZO"),
+    (re.compile(_PROTO + r".*(?:\bopened$|created by )"), "ok", "CONEXIÓN"),
+    (re.compile(_PROTO + r".*(?:\bclosed|destroyed)\b"), "info", "DESCONEXIÓN"),
+]
+
 
 def stack_dir():
     return config.STACKS_DIR / "mediamtx"
+
+
+def _api_get(path, timeout=3):
+    with urllib.request.urlopen(f"{API}{path}?itemsPerPage=100", timeout=timeout) as r:
+        return json.loads(r.read().decode())
 
 
 def build_config(p, tls=False) -> dict:
@@ -263,6 +289,62 @@ class MediaMTX(Module):
         self.remove_firewall(log=job.log)
         self.save_state(installed=False)
         job.warn(f"Las grabaciones se conservan en {stack_dir() / 'recordings'}")
+
+
+    # ── consolas de estado y actividad ──────────────────────────────────────
+    EVENT_RULES = EVENT_RULES
+    EVENTS_NOTE = ("Eventos tomados de los mensajes de MediaMTX 1.21.2: conexiones, quién publica "
+                   "o lee cada ruta, streams activos y claves rechazadas.")
+
+    def log_lines(self, n, source=""):
+        return docker.logs(CONTAINER, n).splitlines()
+
+    def line_level(self, line):
+        m = LOG_LEVEL.match(line)
+        return {"ERR": "err", "WAR": "warn"}.get(m.group(1) if m else "", "info")
+
+    def checks(self):
+        c = docker.container_state(CONTAINER)
+        out = [{"label": "Contenedor", "ok": c["running"], "detail": c["status"] or "—"}]
+        try:
+            n = len(_api_get("/v3/paths/list").get("items") or [])
+            out.append({"label": "API local", "ok": True, "detail": f"{n} rutas"})
+        except (OSError, ValueError) as e:
+            out.append({"label": "API local", "ok": False, "detail": str(e)[:80]})
+        for ep in self.status().get("endpoints", []):
+            out.append({"label": ep["label"], "ok": ep["up"], "detail": ep["value"]})
+        return out
+
+    def connected(self):
+        now = time.time()
+        rows, unreachable = [], []
+        for proto, path in CLIENT_ENDPOINTS:
+            try:
+                items = _api_get(path).get("items") or []
+            except (OSError, ValueError):
+                unreachable.append(proto)  # protocolo desactivado o sin respuesta
+                continue
+            for i in items:
+                created = monitor.parse_ts(i.get("created"))
+                rows.append([proto, STATE_LABEL.get(i.get("state"), "Lee" if proto == "HLS"
+                                                    else i.get("state") or "—"),
+                             i.get("remoteAddr") or "—", i.get("path") or "—",
+                             i.get("user") or "—",
+                             monitor.age(now - created) if created else "—",
+                             monitor.human_bytes(i.get("bytesReceived", i.get("inboundBytes"))),
+                             monitor.human_bytes(i.get("bytesSent", i.get("outboundBytes")))])
+        note = ""
+        try:
+            paths = _api_get("/v3/paths/list").get("items") or []
+            live = [f"{p.get('name')} ({len(p.get('readers') or [])} lectores)"
+                    for p in paths if p.get("ready")]
+            note = "Transmisiones activas: " + (", ".join(live) if live else "ninguna") + "."
+        except (OSError, ValueError):
+            pass
+        if unreachable and len(unreachable) == len(CLIENT_ENDPOINTS):
+            return monitor.table([], [], error="La API local de MediaMTX no responde.")
+        return monitor.table(["Protocolo", "Función", "Origen", "Ruta", "Usuario", "Tiempo",
+                              "Recibido", "Enviado"], rows, note=note)
 
     def routes(self):
         return [("/api/m/mediamtx/paths", "mtx_paths", self.view_paths, ["GET"]),

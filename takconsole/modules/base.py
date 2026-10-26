@@ -12,7 +12,7 @@ módulo una página (/m/<key>) y las rutas genéricas:
 Rutas adicionales se declaran en routes(); todas pasan por el login y CSRF
 globales de la aplicación, no hay forma de registrar una ruta sin autenticación.
 """
-from ..core import firewall, settings
+from ..core import firewall, monitor, settings
 
 
 class Module:
@@ -21,6 +21,28 @@ class Module:
     summary = ""
     order = 100
     template = None
+
+    # ── consolas de estado y actividad (core/monitor.py) ────────────────────
+    EVENT_RULES = []      # [(regex compilada, 'ok'|'info'|'warn'|'err', 'ETIQUETA')]
+    EVENTS_NOTE = ""      # aviso bajo la consola de eventos (qué se reconoce y qué no)
+
+    def log_sources(self) -> list:
+        """[(id, etiqueta)] de los registros disponibles; el primero es el predeterminado."""
+        return [("main", "Registro")]
+
+    def log_lines(self, n: int, source: str = "") -> list:
+        return []
+
+    def line_level(self, line: str) -> str:
+        return monitor.generic_level(line)
+
+    def checks(self) -> list:
+        """[{'label', 'ok', 'detail'}] comprobaciones de salud rápidas."""
+        return []
+
+    def connected(self):
+        """Quién está conectado: monitor.table(columnas, filas, note=..., error=...)."""
+        return monitor.table([], [], note="Este servicio no informa de conexiones.")
 
     # ── estado ──────────────────────────────────────────────────────────────
     def state(self) -> dict:

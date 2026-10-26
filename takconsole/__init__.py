@@ -7,7 +7,7 @@ from flask import (Flask, abort, jsonify, redirect, render_template, request, se
                    session, url_for)
 
 from . import config
-from .core import auth, certs, firewall, settings, system
+from .core import auth, certs, firewall, monitor, settings, system
 from .core.jobs import JOBS, Busy
 
 PUBLIC_ENDPOINTS = {"login", "static", "health"}
@@ -159,6 +159,15 @@ def create_app():
             abort(404)
         label, fn = acts[verb]
         return _start(key, f"{m.name}: {label}", fn)
+
+    @app.route("/api/m/<key>/monitor")
+    def api_monitor(key):
+        """Estado y actividad del servicio: checks, registro clasificado y conectados."""
+        m = MODULES.get(key) or abort(404)
+        snap = monitor.snapshot(m, request.args.get("view", "events"), request.args.get("source", ""))
+        resp = jsonify(ok=True, **snap)
+        resp.headers["Cache-Control"] = "no-store"
+        return resp
 
     @app.route("/api/jobs/<key>")
     def api_job(key):

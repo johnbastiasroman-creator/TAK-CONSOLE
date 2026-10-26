@@ -8,10 +8,13 @@ CoreConfig.example.xml/CoreConfig.xsd) y las dependencias declaradas del .deb
 postgresql-18, que Ubuntu 22.04 no trae y se instala desde el repositorio PGDG).
 """
 import glob
+import http.client
 import io
+import json
 import os
 import re
 import shutil
+import ssl
 import tarfile
 import time
 import urllib.request
@@ -22,7 +25,7 @@ from flask import abort, jsonify, request, send_file, session
 from werkzeug.utils import secure_filename
 
 from .. import config
-from ..core import auth, settings, system, validate
+from ..core import auth, monitor, settings, system, validate
 from ..core.jobs import JOBS, Busy, JobFailed
 from ..core.shell import CommandError, capture, run, which
 from . import takserver_files as tf
@@ -60,6 +63,24 @@ BACKUP_ITEMS = ("certs", "CoreConfig*.xml*", "UserAuthenticationFile.xml*",
 STATE_RESET = ("installed", "int_ca", "version", "deployed_at", "cert_pass", "users",
                "package", "package_version")
 SIGNED_BY = re.compile(r"signed-by=([^\s\]]+)|^Signed-By:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+
+# Consolas de estado y actividad. La API REST es la del código público de TAK Server (5.7):
+# BaseRestController (/Marti/api) + SubscriptionApi (/subscriptions/all). Se consulta en
+# 127.0.0.1:8443 con el certificado «admin» de la propia consola.
+API_PORT = 8443
+SUBSCRIPTIONS_PATH = "/Marti/api/subscriptions/all"
+LOG_FILES = {"messaging": ("takserver-messaging.log", "Mensajería (clientes)"),
+             "api": ("takserver-api.log", "API y administración")}
+# Línea de registro: «2026-10-26-11:36:00.123 [hilo] LEVEL logger - mensaje» (logback-spring.xml);
+# si TAK usa el diseño JSON, el nivel va en "level":"…".
+TAK_LEVEL = re.compile(r"^\S+ \[[^\]]*\] (TRACE|DEBUG|INFO|WARN|ERROR|FATAL)\b|\"level\"\s*:\s*\"(WARN|ERROR|FATAL)")
+EVENT_RULES = [
+    (re.compile(r"authenticat\w* (?:failed|unsuccessful)|Authentication Failed", re.I), "err",
+     "AUTH FALLIDA"),
+    (re.compile(r"ghost connection"), "warn", "FANTASMA"),
+    (re.compile(r"New Federate connection"), "ok", "FEDERACIÓN"),
+    (re.compile(r"Tomcat started on port"), "ok", "ARRANCADO"),
+]
 
 
 def _upload_dir() -> Path:
@@ -132,6 +153,61 @@ def fetch_pgdg_key(dest: Path) -> None:
     tmp.write_bytes(data)
     os.chmod(tmp, 0o644)
     os.replace(tmp, dest)
+
+
+def tak_api_get(path: str, timeout: float = 6.0):
+    """GET a la API de TAK Server en el propio equipo con el certificado «admin».
+
+    No se verifica el certificado del servidor: se conecta solo a 127.0.0.1 y la identidad que
+    importa aquí es la del cliente (mTLS). Lanza OSError con un mensaje legible si falla."""
+    pem, key = FILES / "admin.pem", FILES / "admin.key"
+    if not pem.exists() or not key.exists():
+        raise OSError("faltan admin.pem/admin.key en los certificados de TAK Server")
+    ctx = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    ctx.check_hostname = False
+    ctx.verify_mode = ssl.CERT_NONE
+    try:
+        ctx.load_cert_chain(str(pem), str(key), password=settings.section("takserver").get("cert_pass", ""))
+    except (ssl.SSLError, OSError) as e:
+        raise OSError(f"no se pudo cargar el certificado admin: {e}")
+    conn = http.client.HTTPSConnection("127.0.0.1", API_PORT, context=ctx, timeout=timeout)
+    try:
+        conn.request("GET", path, headers={"Accept": "application/json"})
+        resp = conn.getresponse()
+        body = resp.read(4_000_000)
+    except (OSError, http.client.HTTPException) as e:
+        raise OSError(f"la API en {API_PORT} no responde ({e})")
+    finally:
+        conn.close()
+    if resp.status in (401, 403):
+        raise OSError(f"la API rechazó al administrador (HTTP {resp.status})")
+    if resp.status != 200:
+        raise OSError(f"la API respondió HTTP {resp.status}")
+    try:
+        return json.loads(body.decode("utf-8", errors="replace"))
+    except ValueError:
+        raise OSError("la API no devolvió JSON")
+
+
+def subscription_rows(payload, now: float):
+    """Filas de «Conectados» a partir de /subscriptions/all (ApiResponse con 'data')."""
+    data = payload.get("data") if isinstance(payload, dict) else payload
+    if isinstance(data, dict):
+        data = data.get("subscriptions") or list(data.values())
+    rows, unknown = [], 0
+    for s in data if isinstance(data, list) else []:
+        if not isinstance(s, dict):
+            continue
+        if not (s.get("callsign") or s.get("clientUid")):
+            unknown += 1
+        last = s.get("lastReportMilliseconds")
+        uid = str(s.get("clientUid") or "")
+        rows.append([s.get("callsign") or "—", uid[:18] + ("…" if len(uid) > 18 else ""),
+                     s.get("ipAddress") or "—", s.get("protocol") or "—",
+                     " ".join(x for x in (s.get("takClient"), s.get("takVersion")) if x) or "—",
+                     " / ".join(x for x in (s.get("role"), s.get("team")) if x) or "—",
+                     monitor.age(now - last / 1000) if isinstance(last, (int, float)) and last > 0 else "—"])
+    return rows, unknown
 
 
 def coreconfig_db(text: str) -> dict:
@@ -741,6 +817,60 @@ class TakServer(Module):
                  "(*.backup-<fecha>). Los certificados que otros módulos firmaron con la CA borrada "
                  "(Mumble, RTSPS de MediaMTX) no se podrán renovar con ella: vuelve a desplegarlos "
                  "tras la nueva instalación.")
+
+
+    # ── consolas de estado y actividad ──────────────────────────────────────
+    EVENT_RULES = EVENT_RULES
+    EVENTS_NOTE = ("TAK Server no publica una lista de mensajes de conexión de clientes: aquí se "
+                   "resaltan avisos y errores, más los pocos eventos que se verificaron en su código "
+                   "público (5.7). Quién está conectado se consulta a su API en «Conectados».")
+
+    def log_sources(self):
+        return [(k, label) for k, (_, label) in LOG_FILES.items()]
+
+    def log_lines(self, n, source=""):
+        path = TAK_LOGS / LOG_FILES.get(source, LOG_FILES["messaging"])[0]
+        if not path.exists():
+            return [f"(todavía no existe {path})"]
+        with open(path, "rb") as fh:
+            fh.seek(0, os.SEEK_END)
+            size = fh.tell()
+            fh.seek(max(0, size - 96_000))
+            text = fh.read().decode("utf-8", errors="replace")
+        return text.splitlines()[-n:]
+
+    def line_level(self, line):
+        m = TAK_LEVEL.search(line)
+        lvl = (m.group(1) or m.group(2)) if m else ""
+        return "err" if lvl in ("ERROR", "FATAL") else "warn" if lvl == "WARN" else "info"
+
+    def checks(self):
+        active = capture(["systemctl", "is-active", "takserver"]).output.strip()
+        ports = system.listening_ports()
+        out = [{"label": "Servicio takserver", "ok": active == "active", "detail": active or "—"}]
+        for label, port in (("Clientes TLS", STREAM_PORT), ("Admin (certificado)", API_PORT),
+                            ("Admin (usuario)", 8446)):
+            out.append({"label": label, "ok": (port, "tcp") in ports, "detail": f"{port}/tcp"})
+        log = TAK_LOGS / LOG_FILES["messaging"][0]
+        try:
+            out.append({"label": "Registro", "ok": True,
+                        "detail": "último dato hace " + monitor.age(time.time() - log.stat().st_mtime)})
+        except OSError:
+            out.append({"label": "Registro", "ok": False, "detail": "sin archivo"})
+        return out
+
+    def connected(self):
+        try:
+            payload = tak_api_get(SUBSCRIPTIONS_PATH)
+        except OSError as e:
+            return monitor.table([], [], error=f"No se pudo consultar a TAK Server: {e}")
+        rows, unknown = subscription_rows(payload, time.time())
+        note = "Clientes con sesión abierta en TAK Server (API /Marti/api/subscriptions/all)."
+        if unknown:
+            note += (f" {unknown} entradas no traen indicativo ni UID: la respuesta de tu versión "
+                     "podría tener otro formato.")
+        return monitor.table(["Indicativo", "UID", "Dirección", "Protocolo", "Cliente",
+                              "Rol / equipo", "Último reporte"], rows, note=note)
 
     # ── rutas adicionales ───────────────────────────────────────────────────
     def routes(self):

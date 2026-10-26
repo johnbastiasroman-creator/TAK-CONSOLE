@@ -67,3 +67,36 @@
   </dialog>
 </section>
 {%- endmacro %}
+
+{% macro monitor_panel(m, status) -%}
+{% if status.installed %}
+<section class="panel monitor" data-monitor="{{ m.key }}" aria-label="Estado y actividad de {{ m.name }}">
+  <div class="mon-head">
+    <h2>Estado y actividad</h2>
+    <span class="mon-state"><span class="led off" data-mon-led></span><span data-mon-label>Consultando…</span></span>
+    <div class="mon-tools">
+      <select data-mon-source hidden aria-label="Registro a mostrar"></select>
+      <button class="btn small" type="button" data-mon-pause aria-pressed="false">Pausar</button>
+    </div>
+  </div>
+  <div class="readouts" data-mon-checks aria-live="off"></div>
+  <div class="mon-tabs" role="tablist" aria-label="Consolas de {{ m.name }}">
+    <button class="mon-tab" role="tab" type="button" data-mon-view="events" aria-selected="true">Eventos clave</button>
+    <button class="mon-tab" role="tab" type="button" data-mon-view="raw" aria-selected="false">Registro en vivo</button>
+    <button class="mon-tab" role="tab" type="button" data-mon-view="clients" aria-selected="false">Registro + conectados</button>
+  </div>
+  <p class="muted mon-note" data-mon-note></p>
+  <div class="mon-chips" data-mon-chips hidden></div>
+  <label class="check mon-only" data-mon-only hidden><input type="checkbox" data-mon-onlyev><span>Mostrar solo eventos clave</span></label>
+  <div class="mon-clients" data-mon-clients hidden>
+    <p class="muted" data-mon-cnote></p>
+    <p class="note bad" data-mon-cerr hidden></p>
+    <div class="mon-tablewrap"><table class="list"><thead></thead><tbody></tbody></table></div>
+  </div>
+  <div class="console mon-console">
+    <pre tabindex="0" data-mon-pre aria-label="Registro de {{ m.name }}">Consultando…</pre>
+  </div>
+  <p class="muted mon-foot" data-mon-foot></p>
+</section>
+{% endif %}
+{%- endmacro %}

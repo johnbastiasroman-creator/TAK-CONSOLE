@@ -124,6 +124,23 @@ Desde la consola puedes unir este servidor a una red (y autorizarlo automáticam
 
 Ver [docs/ZEROTIER.md](docs/ZEROTIER.md) para los modos de raíz y la nota de licencia.
 
+## Consolas de estado y actividad
+
+Cada módulo instalado muestra al final de su página el panel **Estado y actividad**: una barra de comprobaciones (contenedor o servicio, puertos, API) y tres consolas que se actualizan solas (cada 3 s; 5 s en la tercera) y se pueden pausar:
+
+1. **Eventos clave**: el registro con los eventos resaltados y una etiqueta (CONEXIÓN, PUBLICA, AUTH FALLIDA…), contadores por tipo y la opción «Mostrar solo eventos clave». Los avisos y errores siempre se resaltan.
+2. **Registro en vivo**: las últimas 300 líneas tal cual, solo coloreadas por nivel.
+3. **Registro + conectados**: una tabla de quién está conectado ahora y, debajo, las últimas líneas.
+
+| Servicio | Registro | Eventos reconocidos | Conectados |
+|---|---|---|---|
+| MediaMTX | `docker logs` | conexiones, publica/lee, stream activo, clave rechazada (formato de MediaMTX 1.21.2) | API local: sesiones RTSP/RTSPS, conexiones RTMP/RTMPS/SRT, sesiones WebRTC/HLS |
+| Mumble | `docker logs` | conexión, autenticado, desconexión, rechazo, expulsión, cambio de canal (servidor 1.6.870) | **Estimado** desde el registro; se contrasta con las conexiones TCP abiertas (`ss`) |
+| TAK Server | `/opt/tak/logs` (mensajería o API) | avisos y errores, más pocos eventos sin lista oficial | API REST en 127.0.0.1:8443 con el certificado `admin` (`/Marti/api/subscriptions/all`) |
+| ZeroTier | contenedores del nodo, ZTNET, Caddy y base de datos | solo avisos y errores | pares `LEAF` de `zerotier-cli listpeers` |
+
+Los valores que parecen contraseñas o tokens (`pass=…`, `token=…`) se enmascaran antes de salir del servidor y la interfaz solo escribe texto, nunca HTML. Estas consolas no sustituyen a una auditoría: el registro de Docker rota y Mumble no ofrece una lista de usuarios sin activar su interfaz ICE.
+
 ## Puertos
 
 | Puerto | Servicio | Exposición |
@@ -202,6 +219,8 @@ TAKCONSOLE_DRY_RUN=1 TAKCONSOLE_PORT=5099 gunicorn -c gunicorn.conf.py wsgi:app 
 ```
 
 ## Limitaciones conocidas
+
+- **Consolas de actividad sin probar en un servidor real.** Los formatos de línea y las rutas de API se tomaron del código fuente de cada proyecto (MediaMTX 1.21.2, Mumble 1.6.870 y el código público de TAK Server, 5.7; tu versión puede diferir) y se probaron con datos de ejemplo. La tabla de TAK Server depende de que `/Marti/api/subscriptions/all` responda con el certificado `admin`; si falla, la consola lo indica en lugar de inventar datos.
 
 - **Sin prueba de extremo a extremo con TAK Server real.** El flujo de certificados se probó con los scripts oficiales `makeRootCa.sh`/`makeCert.sh`, y el `CoreConfig.xml` resultante contra el esquema `CoreConfig.xsd` oficial; la instalación del `.deb`, el arranque del servicio y UserManager deben validarse en tu servidor.
 - **Paquetes de conexión**: siguen el formato usado por otros proyectos abiertos (manifest + `server.pref` + truststore + `.p12`). Pruébalos con tu versión de ATAK/iTAK.
