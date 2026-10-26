@@ -4,7 +4,8 @@
 Pasos verificados contra los scripts oficiales del repositorio
 TAK-Product-Center/Server (makeRootCa.sh, makeCert.sh, cert-metadata.sh,
 CoreConfig.example.xml/CoreConfig.xsd) y las dependencias declaradas del .deb
-(openjdk-17-jdk, postgresql-15, postgresql-15-postgis-3, openssl).
+(openjdk-17-jdk, openssl y PostgreSQL con PostGIS: en 5.8-RELEASE92 es
+postgresql-18, que Ubuntu 22.04 no trae y se instala desde el repositorio PGDG).
 """
 import glob
 import io
@@ -39,11 +40,83 @@ PGDG_LIST = Path("/etc/apt/sources.list.d/pgdg.list")
 STREAM_PORT = 8089
 TOTAL_STEPS = 10
 
+# apt verifica las firmas como el usuario sin privilegios «_apt». Solo se corrigen
+# permisos de directorios que cuelgan de estas raíces (nunca las raíces mismas).
+APT_SAFE_ROOTS = (Path("/usr/share"), Path("/etc/apt"), Path("/usr/local/share"))
+PGP_ARMOR_HEADER = b"-----BEGIN PGP PUBLIC KEY BLOCK-----"
+SIGNED_BY = re.compile(r"signed-by=([^\s\]]+)|^Signed-By:\s*(\S+)", re.IGNORECASE | re.MULTILINE)
+
 
 def _upload_dir() -> Path:
     d = config.UPLOAD_DIR / "takserver"
     d.mkdir(parents=True, exist_ok=True)
     return d
+
+
+def signed_by_path(text: str):
+    """Ruta de la llave que declara un archivo de fuentes apt (una línea o deb822)."""
+    for m in SIGNED_BY.finditer(text):
+        value = m.group(1) or m.group(2)
+        if value and value.startswith("/"):
+            return Path(value)
+    return None
+
+
+def make_apt_readable(path: Path) -> list:
+    """Deja `path` y sus directorios legibles por «_apt»; devuelve los directorios corregidos.
+
+    El servicio de la consola corre con UMask=0077: un `mkdir(parents=True)` crea
+    /usr/share/postgresql-common con modo 0700 y apt, que no es root, no puede abrir la
+    llave (lo reporta como NO_PUBKEY). Solo se AGREGAN permisos de lectura/entrada.
+    """
+    path = Path(path)
+    changed = []
+    if path.is_file():
+        os.chmod(path, (path.stat().st_mode & 0o7777) | 0o044)
+    for d in path.parents:
+        if not any(root in d.parents for root in APT_SAFE_ROOTS):
+            break
+        st = d.stat()
+        if st.st_uid != 0:
+            continue
+        mode = st.st_mode & 0o7777
+        if mode & 0o055 != 0o055:
+            os.chmod(d, mode | 0o055)
+            changed.append(d)
+    return changed
+
+
+def apt_can_read(path: Path) -> bool:
+    """¿Puede el usuario «_apt» leer `path`? (sin usuario _apt, apt verifica como root)."""
+    if config.DRY_RUN or not capture(["id", "_apt"]).ok:
+        return True
+    return capture(["runuser", "-u", "_apt", "--", "test", "-r", str(path)]).ok
+
+
+def key_is_present(path: Path, armored: bool = True) -> bool:
+    try:
+        if not path.is_file() or path.stat().st_size == 0:
+            return False
+        return path.read_bytes().lstrip().startswith(PGP_ARMOR_HEADER) if armored else True
+    except OSError:
+        return False
+
+
+def fetch_pgdg_key(dest: Path) -> None:
+    """Descarga la llave del repositorio PGDG y la escribe de forma atómica y legible."""
+    try:
+        with urllib.request.urlopen(PGDG_KEY_URL, timeout=60) as resp:
+            data = resp.read()
+    except OSError as e:
+        raise JobFailed(f"No se pudo descargar la llave de PGDG ({e}). "
+                        "Comprueba la salida a internet hacia www.postgresql.org") from e
+    if not data.lstrip().startswith(PGP_ARMOR_HEADER):
+        raise JobFailed("La respuesta de postgresql.org no es una llave PGP válida")
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_name(dest.name + ".tmp")
+    tmp.write_bytes(data)
+    os.chmod(tmp, 0o644)
+    os.replace(tmp, dest)
 
 
 class TakServer(Module):
@@ -264,20 +337,42 @@ class TakServer(Module):
                     if "apt.postgresql.org" in Path(p).read_text(errors="ignore")]
         if existing:
             job.ok(f"Repositorio PGDG ya presente ({os.path.basename(existing[0])})")
+            key = signed_by_path(Path(existing[0]).read_text(errors="ignore"))
         else:
             job.log(f"Descargando llave {PGDG_KEY_URL}")
-            PGDG_KEY.parent.mkdir(parents=True, exist_ok=True)
-            os.chmod(PGDG_KEY.parent, 0o755)
-            with urllib.request.urlopen(PGDG_KEY_URL, timeout=60) as resp:
-                PGDG_KEY.write_bytes(resp.read())
+            fetch_pgdg_key(PGDG_KEY)
             code = system.codename() or "jammy"
             PGDG_LIST.write_text(f"deb [signed-by={PGDG_KEY}] "
                                  f"https://apt.postgresql.org/pub/repos/apt {code}-pgdg main\n")
-            # apt verifica las firmas como el usuario _apt: la llave debe ser legible.
-            os.chmod(PGDG_KEY, 0o644)
             os.chmod(PGDG_LIST, 0o644)
             job.ok(f"Repositorio PGDG agregado para {code}")
+            key = PGDG_KEY
+        # Con o sin pgdg.list previo: la llave debe existir y apt (_apt) debe poder leerla.
+        # (No se cambia el umask del proceso: es global y la consola atiende otras peticiones.)
+        if key:
+            self._pgdg_key_ready(job, key)
         run(["apt-get", "update", "-o", "DPkg::Lock::Timeout=600"], log=job.log, timeout=900)
+
+    def _pgdg_key_ready(self, job, key: Path):
+        """Garantiza que la llave declarada existe y que «_apt» puede leerla.
+
+        Un archivo pgdg.list «ya presente» no basta: si la llave falta, está vacía o
+        está en un directorio 0700, apt falla con NO_PUBKEY aunque la llave sea correcta.
+        """
+        ours = key == PGDG_KEY
+        if not key_is_present(key, armored=ours):
+            if not ours:
+                raise JobFailed(f"El repositorio PGDG declara la llave {key}, pero no existe "
+                                "o está vacía. Corrige o elimina esa entrada de apt.")
+            job.warn("La llave de PGDG falta o está vacía; se descarga de nuevo")
+            fetch_pgdg_key(key)
+        changed = make_apt_readable(key)
+        if changed:
+            job.ok("Permisos corregidos para que apt lea la llave: "
+                   + ", ".join(str(d) for d in changed))
+        if not apt_can_read(key):
+            raise JobFailed(f"El usuario _apt no puede leer {key}; apt lo reportaría como "
+                            "NO_PUBKEY. Revisa los permisos de sus directorios.")
 
     def _verify(self, job, pkg, wanted):
         st = self.state()

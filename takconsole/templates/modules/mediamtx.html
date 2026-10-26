@@ -24,15 +24,21 @@
           </div>
           {{ check('tls', 'RTSPS con certificado de la CA de TAK', p.get('tls', False), hint='Puerto 8322/tcp. Requiere TAK Server desplegado.' if tak_ca else 'Disponible cuando TAK Server esté desplegado.') }}
         </fieldset>
+        {# Instalaciones anteriores (sin la clave «auth») sí exigían credenciales. #}
+        {% set auth_on = p.get('auth', status.installed) %}
         <fieldset>
-          <legend>Credenciales</legend>
-          <div class="grid2">
-            {{ input('publish_user', 'Usuario de publicación', p.publish_user or 'publicador', hint='Drones, cámaras y codificadores') }}
-            {{ input('publish_pass', 'Contraseña de publicación', '', type='password', autocomplete='new-password', hint='Vacía: se conserva la actual o se genera una') }}
-            {{ input('read_user', 'Usuario de lectura', p.read_user or 'visor', hint='Clientes que miran el video') }}
-            {{ input('read_pass', 'Contraseña de lectura', '', type='password', autocomplete='new-password', hint='Vacía: se conserva la actual o se genera una') }}
-          </div>
-          {{ check('anonymous_read', 'Permitir ver sin contraseña', p.get('anonymous_read', False), hint='Útil solo si la exposición está limitada a ZeroTier') }}
+          <legend>Acceso</legend>
+          {{ check('auth', 'Exigir usuario y contraseña', auth_on, hint='Desactivado (por defecto): se publica y se ve el video sin clave. Cualquiera que llegue a los puertos activos puede hacerlo, así que limita la exposición a ZeroTier o a la LAN en el firewall.') }}
+          <details class="mt" {% if auth_on %}open{% endif %}>
+            <summary>Usuarios y contraseñas (solo se usan si exiges autenticación)</summary>
+            <div class="grid2">
+              {{ input('publish_user', 'Usuario de publicación', p.publish_user or 'publicador', hint='Drones, cámaras y codificadores') }}
+              {{ input('publish_pass', 'Contraseña de publicación', '', type='password', autocomplete='new-password', hint='Vacía: se conserva la actual o se genera una') }}
+              {{ input('read_user', 'Usuario de lectura', p.read_user or 'visor', hint='Clientes que miran el video') }}
+              {{ input('read_pass', 'Contraseña de lectura', '', type='password', autocomplete='new-password', hint='Vacía: se conserva la actual o se genera una') }}
+            </div>
+            {{ check('anonymous_read', 'Permitir ver sin contraseña', p.get('anonymous_read', False), hint='Publicar seguiría exigiendo contraseña') }}
+          </details>
         </fieldset>
         <fieldset>
           <legend>Grabación</legend>
@@ -73,24 +79,28 @@
       {{ readouts(status.endpoints) }}
       {% set h = hosts[0] if hosts else 'SERVIDOR' %}
       <p class="muted mt">Reemplaza <code>camara1</code> por el nombre de la transmisión.</p>
+      {% set auth_on = p.get('auth', True) %}
+      {% if not auth_on %}<p class="muted">Sin usuario ni contraseña: cualquiera que llegue a estos puertos puede publicar y ver.</p>{% endif %}
       {% if p.rtsp %}<div class="field"><label>Publicar o ver por RTSP</label>
-        <div class="copy"><code>rtsp://{{ p.publish_user }}:CLAVE@{{ h }}:8554/camara1</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+        <div class="copy"><code>rtsp://{% if auth_on %}{{ p.publish_user }}:CLAVE@{% endif %}{{ h }}:8554/camara1</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
       {% if p.srt %}<div class="field"><label>Publicar por SRT</label>
-        <div class="copy"><code>srt://{{ h }}:8890?streamid=publish:camara1:{{ p.publish_user }}:CLAVE&amp;pkt_size=1316</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>
+        <div class="copy"><code>srt://{{ h }}:8890?streamid=publish:camara1{% if auth_on %}:{{ p.publish_user }}:CLAVE{% endif %}&amp;pkt_size=1316</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>
         <div class="field"><label>Ver por SRT</label>
-        <div class="copy"><code>srt://{{ h }}:8890?streamid=read:camara1:{{ p.read_user if not p.anonymous_read else 'any' }}:CLAVE</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+        <div class="copy"><code>srt://{{ h }}:8890?streamid=read:camara1{% if auth_on %}:{{ p.read_user if not p.anonymous_read else 'any' }}:CLAVE{% endif %}</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
       {% if p.rtmp %}<div class="field"><label>Publicar por RTMP</label>
-        <div class="copy"><code>rtmp://{{ h }}:1935/camara1?user={{ p.publish_user }}&amp;pass=CLAVE</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+        <div class="copy"><code>rtmp://{{ h }}:1935/camara1{% if auth_on %}?user={{ p.publish_user }}&amp;pass=CLAVE{% endif %}</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
       {% if p.hls %}<div class="field"><label>Ver en navegador (HLS)</label>
         <div class="copy"><code>http://{{ h }}:8888/camara1/</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
       {% if p.webrtc %}<div class="field"><label>Ver en navegador (WebRTC)</label>
         <div class="copy"><code>http://{{ h }}:8889/camara1/</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
+      {% if auth_on %}
       <details class="mt"><summary>Credenciales actuales</summary>
         <dl class="facts">
           <dt>{{ p.publish_user }}</dt><dd>{{ p.publish_pass }}</dd>
           {% if not p.anonymous_read %}<dt>{{ p.read_user }}</dt><dd>{{ p.read_pass }}</dd>{% endif %}
         </dl>
       </details>
+      {% endif %}
     </section>
     {{ uninstall_panel(m) }}
     {% endif %}

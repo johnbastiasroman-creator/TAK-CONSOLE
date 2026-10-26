@@ -3,7 +3,7 @@
 Consola web para desplegar y administrar, desde el navegador, un servidor de operaciones TAK en un solo equipo:
 
 - **TAK Server**: instalación desde el paquete `.deb` oficial, con autoridad certificadora propia, enrolamiento y paquetes de conexión para ATAK e iTAK.
-- **MediaMTX**: video en vivo (RTSP, RTMP, SRT, HLS, WebRTC) con usuarios de publicación y lectura.
+- **MediaMTX**: video en vivo (RTSP, RTMP, SRT, HLS, WebRTC), por defecto sin usuario ni contraseña para publicar ni para ver (se puede exigir autenticación).
 - **Mumble**: voz por canales, compatible con el plugin ATAK Vx, Mumla y el cliente Mumble.
 - **ZeroTier local**: controlador propio con la interfaz web ZTNET, raíces públicas o raíz privada (planet) a elección.
 
@@ -78,13 +78,18 @@ Pasos del despliegue (verificados contra los scripts oficiales del repositorio [
 
 Después del despliegue la página ofrece: descarga de `admin.p12`, truststore y CA raíz; creación de certificados de usuario (con grupo TAK opcional); paquetes de conexión `.zip` para ATAK/WinTAK (con `MANIFEST/manifest.xml`) y para iTAK (`config.pref`), con la dirección del servidor a elección; y lectura de los registros de TAK Server.
 
+El repositorio PGDG (PostgreSQL) se configura con la llave oficial en `/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc`. En cada despliegue la consola comprueba que la llave exista y que apt (usuario `_apt`) pueda leerla, y repara los permisos si hace falta; sin eso apt falla con `NO_PUBKEY` aunque la llave sea correcta.
+
 Si vuelves a ejecutar el despliegue sin subir un `.deb` nuevo, se reconfigura la instalación existente (CoreConfig, administradores, firewall) sin reinstalar. Los certificados solo se regeneran si marcas **Regenerar certificados**.
 
 ### MediaMTX
 
 - Imagen `bluenviron/mediamtx:1.21.2` en red de host.
 - `mediamtx.yml` completo generado por la consola y validado con `mediamtx --validate-conf` antes de arrancar.
-- Usuarios internos: uno de publicación (publish/read/playback) y uno de lectura (o lectura anónima). La API, métricas y pprof solo aceptan conexiones desde el propio equipo.
+- **Sin usuario ni contraseña por defecto**, tanto para publicar como para ver: la consola configura el usuario `any` de MediaMTX (cualquier usuario, incluso anónimo, sin restricción de IP), igual que la configuración por defecto de MediaMTX. Cualquiera que llegue a los puertos activos puede publicar y ver, así que limita la exposición con el firewall (por ejemplo, solo ZeroTier o la LAN).
+- Marcando **Exigir usuario y contraseña** se usan usuarios internos: uno de publicación (publish/read/playback) y uno de lectura (o lectura anónima).
+- En ambos modos la API, métricas y pprof solo aceptan conexiones desde el propio equipo.
+- Las instalaciones hechas con la versión 0.1.0 conservan sus credenciales hasta que vuelvas a aplicar la configuración.
 - Grabación opcional en fMP4 con retención en días.
 - RTSPS opcional (8322) con certificado firmado por la CA de TAK.
 - Lista de transmisiones activas leída de la API local (`/v3/paths/list`).
