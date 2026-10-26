@@ -137,6 +137,34 @@
 
   <aside>
     {{ job_console(m.key, last_job) }}
+    {% if not status.installed and purge and (purge.files or purge.db_exists) %}
+    <section class="panel">
+      <h2>Datos que dejó TAK Server</h2>
+      <p>Con el servicio desinstalado quedan datos en disco. Bórralos para empezar una instalación limpia.</p>
+      <dl class="facts">
+        {% if purge.files %}<dt>Archivos</dt><dd>{{ purge.home }}{% if purge.size_mb %} ({{ purge.size_mb }} MB){% endif %}: certificados, CA y CoreConfig</dd>{% endif %}
+        {% if purge.db_exists %}<dt>Base de datos</dt><dd>«{{ purge.db.name }}» y rol «{{ purge.db.role }}» de PostgreSQL</dd>{% endif %}
+        {% if purge.uploads %}<dt>Subidos</dt><dd>{{ purge.uploads | join(', ') }}</dd>{% endif %}
+      </dl>
+      {% if purge.files or purge.db_exists %}
+      <button class="btn danger small mt" type="button" data-open="dlg-purge">Borrar datos de TAK Server…</button>
+      <dialog id="dlg-purge">
+        <form data-api="/api/m/takserver/purge" data-close data-reload>
+          <h2>Borrar datos de TAK Server</h2>
+          <p><strong>No se puede deshacer.</strong> Se borrará {% if purge.files %}{{ purge.home }} (la CA y todos los certificados de clientes){% endif %}{% if purge.files and purge.db_exists %} y {% endif %}{% if purge.db_exists %}la base «{{ purge.db.name }}» con todos sus datos{% endif %}. Los clientes ya enrolados tendrán que volver a conectarse con la CA nueva.</p>
+          {{ check('backup', 'Guardar antes un respaldo de certificados y configuración', True, hint='Sin la base de datos. Queda en la carpeta de datos de la consola, solo legible por root.') }}
+          {% if purge.uploads %}{{ check('uploads', 'Borrar también el .deb, la llave y la política subidos', False) }}{% endif %}
+          {{ input('confirm', 'Escribe ' ~ purge_phrase ~ ' para confirmar', placeholder=purge_phrase) }}
+          {{ input('password', 'Contraseña de la consola', type='password', autocomplete='current-password') }}
+          <div class="formfoot">
+            <button class="btn danger" type="submit">Borrar datos</button>
+            <button class="btn" type="button" data-dismiss>Cancelar</button>
+          </div>
+        </form>
+      </dialog>
+      {% endif %}
+    </section>
+    {% endif %}
     {% if status.installed %}
     <section class="panel">
       <h2>Conexión</h2>

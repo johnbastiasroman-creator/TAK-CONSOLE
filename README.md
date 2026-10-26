@@ -67,7 +67,7 @@ Pasos del despliegue (verificados contra los scripts oficiales del repositorio [
 
 1. Comprobaciones (sistema, memoria, disco, puertos 8089/8443/8446 libres).
 2. Límites `nofile 32768` en `/etc/security/limits.conf`.
-3. Repositorio PGDG de PostgreSQL (el `.deb` depende de `postgresql-15` y `postgresql-15-postgis-3`, que Ubuntu 22.04 no trae).
+3. Repositorio PGDG de PostgreSQL (el `.deb` de 5.8-RELEASE92 depende de PostgreSQL 18 con PostGIS, que Ubuntu 22.04 no trae).
 4. Verificación opcional de la firma con `debsig-verify` (`takserver-public-gpg.key` + `deb_policy.pol`).
 5. `apt-get install ./takserver.deb` (trae Java 17 y PostgreSQL).
 6. Certificados con `makeRootCa.sh` y `makeCert.sh` como usuario `tak`: CA raíz, CA intermedia, `takserver`, `admin`. Los sujetos se codifican como PrintableString (algunos clientes TAK no aceptan UTF8String), por eso los campos van sin tildes.
@@ -77,6 +77,15 @@ Pasos del despliegue (verificados contra los scripts oficiales del repositorio [
 10. Reglas de firewall según la política.
 
 Después del despliegue la página ofrece: descarga de `admin.p12`, truststore y CA raíz; creación de certificados de usuario (con grupo TAK opcional); paquetes de conexión `.zip` para ATAK/WinTAK (con `MANIFEST/manifest.xml`) y para iTAK (`config.pref`), con la dirección del servidor a elección; y lectura de los registros de TAK Server.
+
+**Borrar los datos tras desinstalar.** Desinstalar quita el paquete y las reglas de firewall, pero conserva `/opt/tak` (CA, certificados, `CoreConfig.xml`) y la base `cot` de PostgreSQL. Cuando TAK Server ya no está instalado ni en marcha, la página muestra «Datos que dejó TAK Server» con el botón **Borrar datos de TAK Server…**, que pide escribir `BORRAR DATOS` y la contraseña de la consola y entonces:
+
+1. Comprueba que el paquete no está instalado, que `takserver` no está activo y que 8089/8443/8446 están libres.
+2. Guarda un respaldo opcional (marcado por defecto) de `certs`, `CoreConfig*.xml*`, `UserAuthenticationFile.xml*`, `TAKIgniteConfig.xml*` y `conf` en `<datos de la consola>/backups/takserver-<fecha>.tar.gz` (modo 0600; contiene llaves privadas; no incluye la base de datos).
+3. Ejecuta `DROP DATABASE … WITH (FORCE)` y `DROP ROLE` con el nombre de base y de rol leídos de `CoreConfig.xml` (por defecto `cot` y `martiuser`); se niega si el nombre no es un identificador simple o es `postgres`/`template0`/`template1`.
+4. Borra `/opt/tak` (se niega si es un enlace simbólico), opcionalmente el `.deb`, la llave y la política subidos, y restablece el estado del módulo.
+
+No restaura los `pg_hba.conf`/`postgresql.conf` originales de PostgreSQL (TAK Server deja copias `*.backup-<fecha>`), y los certificados que Mumble o MediaMTX firmaron con la CA borrada deben volver a generarse al reinstalar.
 
 El repositorio PGDG (PostgreSQL) se configura con la llave oficial en `/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc`. En cada despliegue la consola comprueba que la llave exista y que apt (usuario `_apt`) pueda leerla, y repara los permisos si hace falta; sin eso apt falla con `NO_PUBKEY` aunque la llave sea correcta.
 
