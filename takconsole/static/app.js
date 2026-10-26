@@ -268,4 +268,156 @@
     } catch (e) { /* sin red */ }
   }
   if ($("[data-led]")) { refreshStatus(); setInterval(refreshStatus, 10000); }
+  // ── Consolas de estado y actividad (/api/m/<servicio>/monitor) ────────────
+  const monEl = $("[data-monitor]");
+  if (monEl) {
+    const key = monEl.dataset.monitor;
+    const pre = $("[data-mon-pre]", monEl);
+    const sel = $("[data-mon-source]", monEl);
+    const pauseBtn = $("[data-mon-pause]", monEl);
+    const onlyBox = $("[data-mon-onlyev]", monEl);
+    const m = { view: "events", source: "", paused: false, timer: null, busy: false, sig: "", srcSig: "" };
+
+    const el = (tag, cls, text) => {
+      const n = document.createElement(tag);
+      if (cls) n.className = cls;
+      if (text !== undefined) n.textContent = text;   // nunca innerHTML: los registros los escriben terceros
+      return n;
+    };
+
+    function renderChecks(checks) {
+      const box = $("[data-mon-checks]", monEl);
+      box.textContent = "";
+      (checks || []).forEach((c) => {
+        const r = el("span", "readout");
+        r.appendChild(el("span", "dot" + (c.ok ? " up" : "")));
+        r.appendChild(document.createTextNode(c.label + " "));
+        r.appendChild(el("b", "", c.detail || ""));
+        box.appendChild(r);
+      });
+    }
+
+    function renderSources(list, current) {
+      const sig = JSON.stringify(list);
+      if (sig === m.srcSig) return;
+      m.srcSig = sig;
+      sel.textContent = "";
+      list.forEach((s) => { const o = el("option", "", s.label); o.value = s.id; sel.appendChild(o); });
+      sel.value = current;
+      sel.hidden = list.length < 2;
+    }
+
+    function renderLines(lines) {
+      const onlyEv = m.view === "events" && onlyBox.checked;
+      const shown = lines.filter((l) => !onlyEv || l.event);
+      const small = m.view === "clients";
+      const slice = small ? shown.slice(-60) : shown;
+      const sig = m.view + "|" + onlyEv + "|" + JSON.stringify(slice);
+      if (sig === m.sig) return;
+      m.sig = sig;
+      const atBottom = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 40;
+      const frag = document.createDocumentFragment();
+      slice.forEach((l) => {
+        const cls = ["ln"];
+        if (m.view === "raw") { if (l.level !== "info") cls.push("lv-" + l.level); }
+        else if (l.event) cls.push("ev-" + l.event.kind);
+        else cls.push("dim");
+        const row = el("div", cls.join(" "));
+        if (m.view !== "raw" && l.event) row.appendChild(el("span", "tag", l.event.tag));
+        row.appendChild(document.createTextNode(l.text));
+        frag.appendChild(row);
+      });
+      if (!slice.length) frag.appendChild(el("div", "ln dim", onlyEv ? "Sin eventos clave en las últimas líneas." : "Sin líneas de registro todavía."));
+      pre.textContent = "";
+      pre.appendChild(frag);
+      if (atBottom || pre.scrollTop === 0) pre.scrollTop = pre.scrollHeight;
+    }
+
+    function renderChips(lines) {
+      const box = $("[data-mon-chips]", monEl);
+      const count = {};
+      lines.forEach((l) => { if (l.event) count[l.event.tag] = (count[l.event.tag] || 0) + 1; });
+      box.textContent = "";
+      Object.entries(count).sort((a, b) => b[1] - a[1]).forEach(([tag, n]) => box.appendChild(el("span", "", `${tag} ${n}`)));
+      box.hidden = m.view !== "events" || !Object.keys(count).length;
+    }
+
+    function renderClients(c) {
+      const wrap = $("[data-mon-clients]", monEl);
+      const show = m.view === "clients" && c;
+      wrap.hidden = !show;
+      if (!show) return;
+      $("[data-mon-cnote]", monEl).textContent = c.note || "";
+      const err = $("[data-mon-cerr]", monEl);
+      err.hidden = !c.error;
+      err.textContent = c.error || "";
+      const head = $("thead", wrap), body = $("tbody", wrap);
+      head.textContent = ""; body.textContent = "";
+      if (c.columns.length) {
+        const tr = el("tr");
+        c.columns.forEach((h) => tr.appendChild(el("th", "", h)));
+        head.appendChild(tr);
+      }
+      c.rows.forEach((r) => { const tr = el("tr"); r.forEach((v) => tr.appendChild(el("td", "", v))); body.appendChild(tr); });
+      if (!c.rows.length && !c.error) {
+        const tr = el("tr", "none"); const td = el("td", "", "Nadie conectado ahora mismo."); td.colSpan = Math.max(1, c.columns.length); tr.appendChild(td); body.appendChild(tr);
+      }
+      if (c.total > c.rows.length) body.appendChild(el("tr", "none")).appendChild(el("td", "", `Se muestran ${c.rows.length} de ${c.total}.`));
+    }
+
+    function render(d) {
+      $("[data-mon-led]", monEl).className = "led " + (d.level || "off");
+      $("[data-mon-label]", monEl).textContent = d.label || "";
+      renderChecks(d.checks);
+      renderSources(d.sources || [], d.source || "");
+      const note = $("[data-mon-note]", monEl);
+      note.textContent = m.view === "events" ? (d.events_note || "") : "";
+      $("[data-mon-only]", monEl).hidden = m.view !== "events";
+      pre.parentElement.classList.toggle("small", m.view === "clients");
+      renderChips(d.lines || []);
+      renderLines(d.lines || []);
+      renderClients(d.clients);
+      const foot = $("[data-mon-foot]", monEl);
+      foot.textContent = (d.log_error ? d.log_error + " · " : "") + "Actualizado " + new Date().toLocaleTimeString() + (m.paused ? " (en pausa)" : " · cada " + interval() / 1000 + " s");
+    }
+
+    const interval = () => (m.view === "clients" ? 5000 : 3000);
+
+    async function tick() {
+      if (m.busy || m.paused || document.hidden) return;
+      m.busy = true;
+      const view = m.view;
+      try {
+        const q = new URLSearchParams({ view, source: m.source });
+        const r = await fetch(`/api/m/${key}/monitor?${q}`, { credentials: "same-origin", cache: "no-store" });
+        if (r.status === 401) { location.href = "/login?next=" + encodeURIComponent(location.pathname); return; }
+        const d = await r.json();
+        if (view === m.view && d.ok) { if (!m.source) m.source = d.source || ""; render(d); }
+      } catch (e) {
+        $("[data-mon-foot]", monEl).textContent = "Sin respuesta de la consola; reintentando…";
+      } finally { m.busy = false; }
+    }
+
+    function schedule() {
+      clearInterval(m.timer);
+      m.timer = setInterval(tick, interval());
+    }
+
+    $$("[data-mon-view]", monEl).forEach((b) => b.addEventListener("click", () => {
+      m.view = b.dataset.monView;
+      $$("[data-mon-view]", monEl).forEach((x) => x.setAttribute("aria-selected", String(x === b)));
+      m.sig = "";
+      schedule(); tick();
+    }));
+    sel.addEventListener("change", () => { m.source = sel.value; m.sig = ""; tick(); });
+    onlyBox.addEventListener("change", () => { m.sig = ""; tick(); });
+    pauseBtn.addEventListener("click", () => {
+      m.paused = !m.paused;
+      pauseBtn.textContent = m.paused ? "Reanudar" : "Pausar";
+      pauseBtn.setAttribute("aria-pressed", String(m.paused));
+      if (!m.paused) tick();
+    });
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) tick(); });
+    schedule(); tick();
+  }
 })();

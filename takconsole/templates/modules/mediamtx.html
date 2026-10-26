@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel %}
+{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
 {% block title %}MediaMTX{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -106,4 +106,5 @@
     {% endif %}
   </aside>
 </div>
+{{ monitor_panel(m, status) }}
 {% endblock %}

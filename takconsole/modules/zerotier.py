@@ -28,7 +28,7 @@ from pathlib import Path
 from flask import abort, jsonify, request, send_file
 
 from .. import config
-from ..core import docker, settings, system, validate
+from ..core import docker, monitor, settings, system, validate
 from ..core.jobs import JOBS, Busy, JobFailed
 from ..core.shell import run
 from .base import Module
@@ -169,6 +169,21 @@ def roots():
     return out
 
 
+LOG_CONTAINERS = [("zerotier", "ZeroTier (nodo)", ZT_CONTAINER),
+                  ("ztnet", "ZTNET (web)", ZTNET_CONTAINER),
+                  ("https", "HTTPS (Caddy)", CADDY_CONTAINER),
+                  ("postgres", "Base de datos", PG_CONTAINER)]
+
+
+def leaf_peers():
+    """Pares «LEAF» que conoce este nodo (zerotier-cli -j listpeers), como lista de dicts."""
+    res = cli("-j", "listpeers")
+    data = json.loads(res.output) if res.ok else None
+    if not isinstance(data, list):
+        raise ValueError("zerotier-cli no devolvió la lista de pares")
+    return [p for p in data if p.get("role") == "LEAF"]
+
+
 def root_mode(peer_roots) -> str:
     if not peer_roots:
         return "desconocido"
@@ -305,6 +320,53 @@ class ZeroTier(Module):
                  "Si la borras, las redes existentes quedan huérfanas.")
 
     # ── rutas adicionales ───────────────────────────────────────────────────
+
+    # ── consolas de estado y actividad ──────────────────────────────────────
+    EVENTS_NOTE = ("No se conoce un formato de eventos de conexión para estos registros: se "
+                   "resaltan solo avisos y errores. Los pares conectados aparecen en «Conectados».")
+
+    def log_sources(self):
+        return [(k, label) for k, label, _ in LOG_CONTAINERS]
+
+    def log_lines(self, n, source=""):
+        name = {k: c for k, _, c in LOG_CONTAINERS}.get(source, ZT_CONTAINER)
+        return docker.logs(name, n).splitlines()
+
+    def checks(self):
+        out = []
+        for _, label, name in LOG_CONTAINERS:
+            c = docker.container_state(name)
+            out.append({"label": label, "ok": c["running"], "detail": c["status"] or "—"})
+        if out and out[0]["ok"]:
+            info = node_info()
+            out.append({"label": "Nodo en línea", "ok": bool(info.get("online")),
+                        "detail": info.get("address", "—")})
+            planets = roots()
+            out.append({"label": "Raíces alcanzables", "ok": any(r["paths"] for r in planets),
+                        "detail": str(sum(1 for r in planets if r["paths"]))})
+        return out
+
+    def connected(self):
+        try:
+            peers = leaf_peers()
+        except ValueError as e:
+            return monitor.table([], [], error=str(e))
+        now_ms = time.time() * 1000
+        rows = []
+        for p in sorted(peers, key=lambda x: x.get("address", "")):
+            active = [x for x in p.get("paths", []) if x.get("active")]
+            via = (active[0].get("address", "—") if active else "")
+            last = max([x.get("lastReceive", 0) or 0 for x in p.get("paths", [])] or [0])
+            lat = p.get("latency")
+            rows.append([p.get("address", "—"), "Directo" if active else "Por relé",
+                         via or "—", f"{lat} ms" if isinstance(lat, int) and lat >= 0 else "—",
+                         p.get("version") or "—",
+                         monitor.age((now_ms - last) / 1000) if last else "—"])
+        return monitor.table(["Dirección ZeroTier", "Conexión", "Ruta", "Latencia", "Versión",
+                              "Último dato"], rows,
+                             note="Pares con los que este nodo ha hablado recientemente. Los "
+                                  "miembros autorizados de cada red se ven en ZTNET.")
+
     def routes(self):
         return [
             ("/api/m/zerotier/join", "zt_join", self.view_join, ["POST"]),
