@@ -1,60 +1,40 @@
 # SPDX-License-Identifier: Apache-2.0
-"""Autenticación de la consola: un usuario administrador, sesión y CSRF."""
+"""Autenticación de la consola: inicio de sesión, límite de intentos y CSRF.
+
+Los usuarios y sus roles viven en core/users.py."""
 import hmac
 import secrets
 import threading
 import time
 
-from werkzeug.security import check_password_hash, generate_password_hash
-
 from .. import config
-from .settings import write_json_atomic
+from . import users
+from .users import MIN_PASSWORD  # noqa: F401  (lo usa la CLI)
 
-MIN_PASSWORD = 12
 _FAILS = {}
 _FAILS_LOCK = threading.Lock()
 MAX_FAILS = 5
 LOCK_SECONDS = 300
 
 
-def _auth_path():
-    return config.CONFIG_DIR / "auth.json"
-
-
 def is_configured() -> bool:
-    return _auth_path().exists()
+    return users.is_configured()
 
 
-def _load():
-    import json
-    try:
-        with open(_auth_path(), encoding="utf-8") as fh:
-            return json.load(fh)
-    except (OSError, ValueError):
-        return {}
-
-
-def set_password(password: str, username: str = "admin"):
-    if len(password) < MIN_PASSWORD:
-        raise ValueError(f"La contraseña debe tener al menos {MIN_PASSWORD} caracteres")
-    write_json_atomic(_auth_path(), {
-        "username": username,
-        "hash": generate_password_hash(password),
-        "changed": int(time.time()),
-    })
-
-
-def username() -> str:
-    return _load().get("username", "admin")
+def authenticate(username: str, password: str):
+    """Usuario (dict público) si las credenciales son válidas y la cuenta está activa."""
+    return users.authenticate(username, password)
 
 
 def verify(user: str, password: str) -> bool:
-    data = _load()
-    if not data.get("hash"):
-        return False
-    user_ok = hmac.compare_digest(user or "", data.get("username", "admin"))
-    pass_ok = check_password_hash(data["hash"], password or "")
-    return user_ok and pass_ok
+    """¿Es `password` la contraseña de `user`? (confirmación de acciones peligrosas)"""
+    return users.authenticate(user, password) is not None
+
+
+def set_password(password: str, username: str = "admin"):
+    """Recuperación desde el servidor: fija la contraseña (y reactiva la cuenta); crea el
+    usuario como administrador si no existe."""
+    return users.reset_or_create_admin(username, password)
 
 
 # ── limitación de intentos por IP ───────────────────────────────────────────

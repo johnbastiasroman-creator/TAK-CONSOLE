@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
+{% from "_macros.html" import not_deployed_note, led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
 {% block title %}MediaMTX{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -11,6 +11,8 @@
 
 <div class="module">
   <div>
+    {{ not_deployed_note(status) }}
+    {% if can('admin') %}
     <section class="panel">
       <h2>Configuración</h2>
       <p>Activa solo los protocolos que usarán tus fuentes de video. Cada protocolo abre sus puertos según la política de exposición.</p>
@@ -54,6 +56,8 @@
       </form>
     </section>
 
+    {% endif %}
+
     {% if status.installed %}
     <section class="panel">
       <h2>Transmisiones activas</h2>
@@ -93,7 +97,7 @@
         <div class="copy"><code>http://{{ h }}:8888/camara1/</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
       {% if p.webrtc %}<div class="field"><label>Ver en navegador (WebRTC)</label>
         <div class="copy"><code>http://{{ h }}:8889/camara1/</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>{% endif %}
-      {% if auth_on %}
+      {% if auth_on and can('admin') %}
       <details class="mt"><summary>Credenciales actuales</summary>
         <dl class="facts">
           <dt>{{ p.publish_user }}</dt><dd>{{ p.publish_pass }}</dd>

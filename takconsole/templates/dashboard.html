@@ -8,7 +8,7 @@
     <p>{{ host.os }}{% if not host.supported %}. Esta consola está probada en Ubuntu 22.04 LTS.{% endif %}</p>
   </div>
   <div class="btnrow">
-    <a class="btn small" href="/red">Política: {{ {'all': 'todas las interfaces', 'zerotier': 'solo ZeroTier', 'zerotier_lan': 'ZeroTier + red local'}[policy.exposure] }}</a>
+    {% if can('admin') %}<a class="btn small" href="/red">Política: {{ {'all': 'todas las interfaces', 'zerotier': 'solo ZeroTier', 'zerotier_lan': 'ZeroTier + red local'}[policy.exposure] }}</a>{% endif %}
   </div>
 </div>
 
@@ -49,7 +49,7 @@
       <div class="state" data-state-label>{{ s.label }}{% if s.version %}, {{ s.version }}{% endif %}</div>
     </div>
     {% if s.endpoints %}{{ readouts(s.endpoints) }}{% else %}<div class="empty-note">Sin desplegar</div>{% endif %}
-    <div class="go"><a class="btn small{% if not s.installed %} primary{% endif %}" href="/m/{{ key }}">{{ 'Administrar' if s.installed else 'Desplegar' }}</a></div>
+    <div class="go"><a class="btn small{% if not s.installed and can('admin') %} primary{% endif %}" href="/m/{{ key }}">{% if can('admin') %}{{ 'Administrar' if s.installed else 'Desplegar' }}{% else %}Ver{% endif %}</a></div>
   </div>
   {% endfor %}
 </section>
@@ -62,7 +62,7 @@
     <li><a href="/m/zerotier">ZeroTier</a>: crea la red y une este servidor; obtienes la IP por la que llegarán los equipos.</li>
     <li><a href="/m/takserver">TAK Server</a>: sube el .deb, define la CA y genera los paquetes de conexión con la IP ZeroTier.</li>
     <li><a href="/m/mediamtx">MediaMTX</a> y <a href="/m/mumble">Mumble</a>: video y voz; pueden usar certificados de la CA de TAK.</li>
-    <li><a href="/red">Red y firewall</a>: limita los servicios a la red ZeroTier si no deben verse en la LAN.</li>
+    {% if can('admin') %}<li><a href="/red">Red y firewall</a>: limita los servicios a la red ZeroTier si no deben verse en la LAN.</li>{% endif %}
   </ol>
 </section>
 {% endif %}

@@ -182,7 +182,7 @@ input:focus, select:focus, textarea:focus { border-color: var(--amber); outline:
 
 .note { border-left: 3px solid var(--amber); background: #2a2a1f; padding: 11px 14px; border-radius: 0 var(--r-sm) var(--r-sm) 0; font-size: 14px; margin: 14px 0 0; }
 .note.bad { border-left-color: var(--err); background: #2f2320; }
-.note.good { border-left-color: var(--ok); background: #1f2d24; }
+.note.good, .note.form-ok { border-left-color: var(--ok); background: #1f2d24; }
 .note p:last-child { margin-bottom: 0; }
 
 dl.facts { display: grid; grid-template-columns: auto 1fr; gap: 6px 14px; margin: 10px 0 0; font-size: 14px; }
@@ -289,3 +289,17 @@ dialog h2 { margin-bottom: 8px; }
 .mon-console pre .ev-ok, .mon-console pre .ev-info { color: #dfe6df; }
 .mon-console pre .dim { opacity: .55; }
 @media (max-width: 640px) { .mon-console pre { height: 260px; } .mon-tab { padding: 9px 8px; font-size: 14px; } }
+
+/* ── Usuarios y roles ───────────────────────────────────────────────────── */
+.module.single { grid-template-columns: minmax(0, 880px); }
+.module.single > div { display: flex; flex-direction: column; gap: 20px; }
+.rail .whoami { display: flex; flex-direction: column; gap: 1px; margin-top: auto; padding: 8px 10px; border-radius: var(--r-sm); text-decoration: none; color: var(--muted); }
+.rail .whoami b { color: var(--text); font: 600 14.5px/1.2 var(--display); overflow: hidden; text-overflow: ellipsis; }
+.rail .whoami span { font-size: 12.5px; }
+.rail .whoami:hover, .rail .whoami[aria-current="page"] { background: var(--panel); }
+.rail .whoami + form { margin-top: 6px; }
+tr.manage > td { background: #1f2723; padding: 14px 16px; }
+.manage-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 18px; }
+.manage-grid h3 { margin: 0 0 8px; font-size: 15px; }
+.manage-grid form { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.manage-grid .field { width: 100%; }

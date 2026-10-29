@@ -27,12 +27,18 @@ Navegador ──HTTPS:5001──▶ gunicorn (1 proceso, 8 hilos)
 |---|---|
 | Comandos como listas de argumentos, nunca `shell=True` | `core/shell.py` |
 | Toda ruta requiere sesión; todo POST requiere CSRF | `before_request` en `takconsole/__init__.py` |
+| Toda ruta exige un permiso del rol; lo no listado exige `admin` (denegación por defecto) | `core/rbac.py` + `tests/test_roles.py` |
+| Cambios de usuarios piden la contraseña del administrador; siempre queda un administrador activo | `core/users.py`, `takconsole/__init__.py` |
 | Valores de formularios validados con listas blancas antes de llegar a archivos o comandos | `core/validate.py` |
 | Secretos ocultos en los registros | `shell.run(..., secrets=[...])` |
 | Contenedores en `network_mode: host` o publicados solo en `127.0.0.1` (Docker se salta UFW) | `compose_data()` de cada módulo + `tests/test_modules.py` |
 | Reglas UFW etiquetadas `tak-console:<módulo>` | `core/firewall.py` |
 | Imágenes con versión fija, nunca `latest` | constantes `IMAGE` + prueba automática |
 | Archivos con secretos en modo 600 | `docker.write_env`, `docker.write_private`, `settings` |
+
+## Roles y permisos
+
+`core/rbac.py` define los permisos (`view`, `monitor`, `service_control`, `tak_certs`, `zerotier_net`, `admin`), los tres roles y `ENDPOINT_PERMS` (endpoint de Flask → permiso). Al agregar una ruta, clasifícala ahí: `tests/test_roles.py` falla si falta. En las plantillas, `can('permiso')` decide qué se dibuja, pero eso es solo comodidad: el control real es el `before_request`, que consulta al usuario en cada petición (un cambio de rol o una cuenta desactivada valen al instante). Los secretos se omiten del HTML cuando `can('admin')` es falso, no solo se ocultan con CSS.
 
 ## Cómo agregar un módulo
 
@@ -67,10 +73,12 @@ La consola genera automáticamente: la página `/m/<clave>`, `POST /api/m/<clave
 ```
 data/
   config/settings.json    estado y secretos de los módulos (600)
-  config/auth.json        hash de la contraseña de la consola (600)
+  config/users.json       usuarios de la consola: rol, hash de contraseña, estado (600)
+  config/auth.json        (solo instalaciones 0.1.0) usuario único; se migra a users.json y se deja en su sitio
   config/secret_key       clave de sesión de Flask (600)
   certs/console.{crt,key} HTTPS de la consola y de ZTNET
   logs/<módulo>-<fecha>.log
+  logs/audit.log          quién hizo qué (600, rota a 1 MB, sin contraseñas)
   uploads/takserver/      .deb, llave GPG y política subidos
   stacks/mediamtx/        compose.yaml, config/mediamtx.yml, recordings/
   stacks/mumble/          compose.yaml, mumble.env, data/ (base SQLite, tls/)

@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% from "_macros.html" import input %}
+{% block title %}Usuarios{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Usuarios de la consola</h1><p>Quién puede entrar a esta consola y qué puede hacer. Cada cambio pide tu contraseña.</p></div>
+</div>
+
+<div class="module single">
+  <div>
+    <section class="panel">
+      <h2>Roles</h2>
+      <table class="list">
+        <thead><tr><th>Rol</th><th>Qué puede hacer</th></tr></thead>
+        <tbody>
+        {% for key in role_order %}<tr><td><b>{{ roles[key].label }}</b></td><td>{{ roles[key].about }}</td></tr>{% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Crear usuario</h2>
+      <form data-api="/api/usuarios/crear" data-reload autocomplete="off">
+        <div class="grid2">
+          {{ input('username', 'Nombre de usuario', hint='3 a 32 caracteres: letras, números, punto, guion y guion bajo') }}
+          <div class="field" data-field="role"><label for="f-role">Rol</label>
+            <select id="f-role" name="role">
+              {% for key in role_order if key != 'admin' %}<option value="{{ key }}">{{ roles[key].label }}</option>{% endfor %}
+              <option value="admin">{{ roles['admin'].label }}</option>
+            </select><span class="err" role="alert"></span></div>
+          {{ input('password', 'Contraseña inicial', type='password', autocomplete='new-password', hint='Mínimo ' ~ min_password ~ ' caracteres. Compártela por un canal seguro; la persona puede cambiarla en «Mi cuenta».') }}
+          {{ input('admin_password', 'Tu contraseña (confirmación)', type='password', autocomplete='current-password') }}
+        </div>
+        <div class="formfoot"><button class="btn primary" type="submit">Crear usuario</button></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Usuarios</h2>
+      <table class="list">
+        <thead><tr><th>Usuario</th><th>Rol</th><th>Estado</th><th>Último acceso</th><th></th></tr></thead>
+        <tbody>
+        {% for u in users %}
+          {% set me = u.username.lower() == current_user.username.lower() %}
+          {% set n = loop.index %}
+          <tr>
+            <td>{{ u.username }}{% if me %} <span class="muted">(tú)</span>{% endif %}</td>
+            <td>{{ roles[u.role].label if u.role in roles else u.role }}</td>
+            <td>{{ 'Desactivado' if u.disabled else 'Activo' }}</td>
+            <td>{{ u.last_login | datetime }}</td>
+            <td>{% if me %}<span class="muted">Usa «Mi cuenta»</span>{% else %}<a href="#u{{ n }}" data-toggle="u{{ n }}">Gestionar</a>{% endif %}</td>
+          </tr>
+          {% if not me %}
+          <tr id="u{{ n }}" class="manage" hidden><td colspan="5">
+            <div class="manage-grid">
+              <form data-api="/api/usuarios/{{ u.username }}/rol" data-reload autocomplete="off">
+                <h3>Cambiar rol</h3>
+                <div class="field" data-field="role"><label for="u{{ n }}-role">Rol</label>
+                  <select id="u{{ n }}-role" name="role">
+                    {% for key in role_order %}<option value="{{ key }}" {% if key == u.role %}selected{% endif %}>{{ roles[key].label }}</option>{% endfor %}
+                  </select><span class="err" role="alert"></span></div>
+                <div class="field" data-field="admin_password"><label for="u{{ n }}-r-pw">Tu contraseña</label>
+                  <input id="u{{ n }}-r-pw" name="admin_password" type="password" autocomplete="current-password"><span class="err" role="alert"></span></div>
+                <button class="btn small" type="submit">Guardar rol</button>
+              </form>
+              <form data-api="/api/usuarios/{{ u.username }}/password" data-reload autocomplete="off">
+                <h3>Restablecer contraseña</h3>
+                <div class="field" data-field="new_password"><label for="u{{ n }}-pw">Contraseña nueva</label>
+                  <input id="u{{ n }}-pw" name="new_password" type="password" autocomplete="new-password"><span class="hint">Cierra sus sesiones abiertas.</span><span class="err" role="alert"></span></div>
+                <div class="field" data-field="admin_password"><label for="u{{ n }}-p-pw">Tu contraseña</label>
+                  <input id="u{{ n }}-p-pw" name="admin_password" type="password" autocomplete="current-password"><span class="err" role="alert"></span></div>
+                <button class="btn small" type="submit">Restablecer</button>
+              </form>
+              <form data-api="/api/usuarios/{{ u.username }}/estado" data-reload autocomplete="off">
+                <h3>{{ 'Activar' if u.disabled else 'Desactivar' }} cuenta</h3>
+                <input type="hidden" name="disabled" value="{{ '' if u.disabled else '1' }}">
+                <div class="field" data-field="admin_password"><label for="u{{ n }}-s-pw">Tu contraseña</label>
+                  <input id="u{{ n }}-s-pw" name="admin_password" type="password" autocomplete="current-password"><span class="err" role="alert"></span></div>
+                <button class="btn small" type="submit">{{ 'Activar' if u.disabled else 'Desactivar' }}</button>
+              </form>
+              <form data-api="/api/usuarios/{{ u.username }}/borrar" data-reload data-confirm="¿Eliminar al usuario {{ u.username }}? No se puede deshacer." autocomplete="off">
+                <h3>Eliminar</h3>
+                <div class="field" data-field="admin_password"><label for="u{{ n }}-d-pw">Tu contraseña</label>
+                  <input id="u{{ n }}-d-pw" name="admin_password" type="password" autocomplete="current-password"><span class="err" role="alert"></span></div>
+                <button class="btn small danger" type="submit">Eliminar usuario</button>
+              </form>
+            </div>
+          </td></tr>
+          {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </section>
+
+    <section class="panel">
+      <h2>Actividad reciente</h2>
+      <p>Quién hizo qué, desde dónde y con qué resultado. Se guarda en <code>logs/audit.log</code> sin contraseñas ni datos de formularios.</p>
+      <pre class="logs" tabindex="0">{% for l in audit_lines %}{{ l }}
+{% else %}Todavía no hay actividad registrada.{% endfor %}</pre>
+    </section>
+  </div>
+</div>
+{% endblock %}

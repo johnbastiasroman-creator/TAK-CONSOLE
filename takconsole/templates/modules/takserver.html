@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
+{% from "_macros.html" import not_deployed_note, led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
 {% block title %}TAK Server{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -11,6 +11,8 @@
 
 <div class="module">
   <div>
+    {{ not_deployed_note(status) }}
+    {% if can('admin') %}
     <section class="panel">
       <h2>1. Paquete de instalación</h2>
       <p>Descarga el .deb de TAK Server desde tak.gov y súbelo aquí. Opcionalmente agrega la llave GPG y la política para verificar la firma.</p>
@@ -83,10 +85,13 @@
       </form>
     </section>
 
+    {% endif %}
+
     {% if status.installed %}
     <section class="panel">
       <h2>Usuarios y paquetes de conexión</h2>
       <p>Cada usuario recibe un certificado firmado por la CA intermedia. El paquete .zip configura la conexión en ATAK o iTAK al importarlo.</p>
+      {% if can('tak_certs') %}
       <form data-api="/api/m/takserver/users" data-reload>
         <div class="grid3">
           {{ input('name', 'Nombre del equipo o usuario', placeholder='alfa-01', hint='Letras, números y guion') }}
@@ -94,6 +99,7 @@
           <div class="field"><label>&nbsp;</label><button class="btn" type="submit">Crear certificado</button></div>
         </div>
       </form>
+      {% if can('tak_certs') %}
       <div class="grid2">
         <div class="field">
           <label for="pkg-host">Dirección del servidor en los paquetes</label>
@@ -108,16 +114,18 @@
           <input id="pkg-custom" type="text" placeholder="tak.ejemplo.cl">
         </div>
       </div>
+      {% endif %}
+      {% endif %}
       {% if users %}
       <table class="list">
-        <thead><tr><th>Usuario</th><th>Grupo</th><th>Creado</th><th>Paquete</th></tr></thead>
+        <thead><tr><th>Usuario</th><th>Grupo</th><th>Creado</th>{% if can('tak_certs') %}<th>Paquete</th>{% endif %}</tr></thead>
         <tbody>
         {% for u in users %}
           <tr><td>{{ u.name }}</td><td>{{ u.group or '—' }}</td><td>{{ u.created | datetime }}</td>
-            <td><div class="btnrow">
+            {% if can('tak_certs') %}<td><div class="btnrow">
               <a class="btn small" data-pkg-user="{{ u.name }}" data-kind="atak" href="#">ATAK</a>
               <a class="btn small" data-pkg-user="{{ u.name }}" data-kind="itak" href="#">iTAK</a>
-            </div></td></tr>
+            </div></td>{% endif %}</tr>
         {% endfor %}
         </tbody>
       </table>
@@ -137,7 +145,7 @@
 
   <aside>
     {{ job_console(m.key, last_job) }}
-    {% if not status.installed and purge and (purge.files or purge.db_exists) %}
+    {% if can('admin') and not status.installed and purge and (purge.files or purge.db_exists) %}
     <section class="panel">
       <h2>Datos que dejó TAK Server</h2>
       <p>Con el servicio desinstalado quedan datos en disco. Bórralos para empezar una instalación limpia.</p>
@@ -174,6 +182,7 @@
         <dt>Enrolamiento</dt><dd>{{ 'activado' if coreconfig and coreconfig.enrollment else 'desactivado' }}</dd>
         {% if hosts %}<dt>Admin</dt><dd>https://{{ hosts[0] }}:8443</dd>{% endif %}
       </dl>
+      {% if can('admin') %}
       <div class="btnrow mt">
         <a class="btn small" href="/m/takserver/download/admin.p12">admin.p12</a>
         <a class="btn small" href="/m/takserver/download/truststore.p12">Truststore</a>
@@ -181,6 +190,7 @@
         <button class="btn small" type="button" data-action="/api/m/takserver/admins">Reaplicar administradores</button>
       </div>
       <p class="muted mt">Importa admin.p12 en el navegador (contraseña de certificados) para entrar al puerto 8443.</p>
+      {% endif %}
     </section>
     {% if coreconfig %}
     <section class="panel">

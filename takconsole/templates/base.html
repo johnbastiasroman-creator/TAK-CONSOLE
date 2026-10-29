@@ -19,9 +19,16 @@
       <a href="/m/{{ key }}" {% if request.path == '/m/' ~ key %}aria-current="page"{% endif %}>
         <span class="led off" data-led="{{ key }}" aria-hidden="true"></span>{{ mod.name }}</a>
       {% endfor %}
+      {% if can('admin') %}
       <div class="sep"></div>
       <a href="/red" {% if request.path == '/red' %}aria-current="page"{% endif %}>Red y firewall</a>
+      <a href="/usuarios" {% if request.path == '/usuarios' %}aria-current="page"{% endif %}>Usuarios</a>
+      {% endif %}
     </nav>
+    {% if current_user %}
+    <a class="whoami" href="/cuenta" {% if request.path == '/cuenta' %}aria-current="page"{% endif %}>
+      <b>{{ current_user.username }}</b><span>{{ role_label }} · Mi cuenta</span></a>
+    {% endif %}
     <form method="post" action="/logout">
       <input type="hidden" name="csrf" value="{{ csrf_token }}">
       <button class="linkbtn" type="submit">Cerrar sesión</button>

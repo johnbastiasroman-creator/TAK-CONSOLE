@@ -42,7 +42,7 @@ El instalador:
 5. Agrega reglas UFW para SSH y la consola **sin activar UFW**: lo activas tú desde *Red y firewall*.
 6. Crea y arranca el servicio `tak-console` (gunicorn en `https://<ip>:5001`).
 
-Se puede volver a ejecutar para reparar o actualizar. Para cambiar la contraseña: `sudo scripts/reset-password.sh`. Para actualizar desde git: `sudo scripts/update.sh`.
+Se puede volver a ejecutar para reparar o actualizar. Para recuperar el acceso: `sudo scripts/reset-password.sh` (ver *Usuarios y roles*). Para actualizar desde git: `sudo scripts/update.sh`.
 
 ## Orden de despliegue
 
@@ -141,6 +141,35 @@ Cada módulo instalado muestra al final de su página el panel **Estado y activi
 
 Los valores que parecen contraseñas o tokens (`pass=…`, `token=…`) se enmascaran antes de salir del servidor y la interfaz solo escribe texto, nunca HTML. Estas consolas no sustituyen a una auditoría: el registro de Docker rota y Mumble no ofrece una lista de usuarios sin activar su interfaz ICE.
 
+## Usuarios y roles
+
+La consola tiene tres roles fijos. El primer usuario (`admin`, el que crea el instalador) es Administrador; desde **Usuarios** (solo administrador) se crean los demás.
+
+| Puede… | Administrador | Operador | Observador |
+|---|:-:|:-:|:-:|
+| Ver estado de servicios y registro de tareas | ✔ | ✔ | ✔ |
+| Ver las consolas de estado y actividad y los registros | ✔ | ✔ | ✔ |
+| Iniciar, detener y reiniciar servicios ya desplegados | ✔ | ✔ | — |
+| TAK Server: crear certificados de usuario y bajar sus paquetes de conexión | ✔ | ✔ | — |
+| ZeroTier: unir este servidor a una red o sacarlo de ella | ✔ | ✔ | — |
+| Desplegar, redesplegar y desinstalar; borrar datos de TAK Server | ✔ | — | — |
+| Red y firewall, certificado HTTPS de la consola, política de TAK, planet de ZeroTier | ✔ | — | — |
+| Ver secretos (contraseñas de MediaMTX y Mumble, `admin.p12`, CA, truststore) | ✔ | — | — |
+| Gestionar usuarios | ✔ | — | — |
+
+Cómo se aplica:
+
+- **Denegación por defecto.** Cada ruta declara el permiso que exige en `takconsole/core/rbac.py`; una ruta que no figura allí exige Administrador. Una prueba automática falla si hay una ruta sin clasificar o una clasificación que ya no existe.
+- **La interfaz oculta lo que no puedes usar, pero la barrera real está en el servidor**: el rol se comprueba en cada petición y un cambio de rol, una contraseña nueva o una cuenta desactivada surten efecto de inmediato (la sesión abierta se cierra).
+- **Operador y paquetes de TAK**: solo puede bajar paquetes de los usuarios creados desde la consola, nunca el de `admin`.
+- **Cambios de usuarios** (crear, rol, restablecer contraseña, desactivar, eliminar) piden de nuevo la contraseña del administrador que los hace, y los intentos fallidos cuentan para el bloqueo por IP. Un administrador no puede quitarse el rol, desactivarse, eliminarse ni restablecerse a sí mismo desde esa página (usa **Mi cuenta**), y siempre queda al menos un administrador activo.
+- **Mi cuenta** (cualquier usuario): cambiar la propia contraseña; cierra las demás sesiones de esa cuenta.
+- **Registro de auditoría** en `data/logs/audit.log` (600, rota a 1 MB): inicios y cierres de sesión, accesos fallidos, toda acción que modifica algo, descargas sensibles y cada negativa por permisos, con usuario, rol, IP y resultado. No guarda contraseñas ni datos de formularios. Los últimos eventos se ven en **Usuarios**.
+- **Recuperación** desde el servidor: `sudo scripts/reset-password.sh` (restablece `admin`), `--user NOMBRE` (restablece o crea un administrador con ese nombre y lo reactiva), `--random` (genera la contraseña) y `--list` (lista usuarios, roles y estado).
+- **Instalaciones anteriores**: el único usuario de `config/auth.json` pasa solo a `config/users.json` como Administrador la primera vez que arranca esta versión (el archivo viejo no se borra). Habrá que iniciar sesión otra vez una vez.
+
+Qué no cubre: los roles protegen la consola, no los servicios. Al unir o sacar el servidor de una red ZeroTier, la consola reaplica las reglas de firewall de los servicios según las interfaces ZeroTier detectadas, de modo que un Operador influye indirectamente en esas reglas (no puede editarlas). Tampoco hay límite por grupo: un Operador puede crear certificados de TAK en cualquier grupo.
+
 ## Puertos
 
 | Puerto | Servicio | Exposición |
@@ -167,7 +196,7 @@ Docker publica puertos saltándose UFW. Por eso todos los contenedores usan `net
 
 ## Seguridad
 
-- Toda ruta exige sesión iniciada; no es posible registrar una ruta sin autenticación. Todo POST exige token CSRF.
+- Toda ruta exige sesión iniciada; no es posible registrar una ruta sin autenticación. Todo POST exige token CSRF. Cada ruta exige además un permiso según el rol (*Usuarios y roles*) y lo no clasificado exige Administrador.
 - Bloqueo de 5 minutos tras 5 intentos fallidos por IP. Sesión inactiva caduca a los 30 minutos.
 - Cabeceras CSP estrictas (sin scripts ni estilos en línea), `X-Frame-Options: DENY`.
 - Los comandos se ejecutan como listas de argumentos, nunca a través de una shell; los valores que llegan a archivos de configuración, certificados o comandos se validan con listas blancas de caracteres.
@@ -184,9 +213,9 @@ wsgi.py
 takconsole/
   __init__.py           aplicación Flask: login, CSRF, rutas genéricas de módulos
   config.py             rutas y constantes
-  cli.py                set-password, console-cert
+  cli.py                set-password, list-users, console-cert
   core/                 settings (JSON), jobs (tareas en segundo plano), shell, firewall,
-                        docker, certs, system, validate, auth
+                        docker, certs, system, validate, auth, users, rbac, audit
   modules/              un archivo por servicio: zerotier, takserver, mediamtx, mumble
   templates/            páginas (Jinja2)
   static/               CSS, JS y fuentes Barlow (OFL) servidas localmente

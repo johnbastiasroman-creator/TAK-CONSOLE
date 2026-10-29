@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
+{% from "_macros.html" import not_deployed_note, led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
 {% block title %}Mumble{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -11,6 +11,8 @@
 
 <div class="module">
   <div>
+    {{ not_deployed_note(status) }}
+    {% if can('admin') %}
     <section class="panel">
       <h2>Configuración</h2>
       <p>Servidor oficial de Mumble. Lo usan el plugin ATAK Vx del TAK Product Center, Mumla en Android y el cliente Mumble de escritorio.</p>
@@ -42,6 +44,8 @@
       </form>
     </section>
 
+    {% endif %}
+
     {% if status.installed %}
     <section class="panel">
       <h2>Registro del servidor</h2>
@@ -62,12 +66,14 @@
         <div class="copy"><code>mumble://{{ h }}:{{ port }}</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>
       {% endfor %}
       <p class="muted mt">En ATAK Vx agrega un servidor Mumble con esta dirección y puerto. En Mumla o Mumble de escritorio usa la misma dirección; la contraseña es la del servidor.</p>
+      {% if can('admin') %}
       <details class="mt"><summary>Contraseñas actuales</summary>
         <dl class="facts">
           <dt>Servidor</dt><dd>{{ p.server_pass or '(sin contraseña)' }}</dd>
           <dt>SuperUser</dt><dd>{{ p.superuser_pass }}</dd>
         </dl>
       </details>
+      {% endif %}
     </section>
     {{ uninstall_panel(m) }}
     {% endif %}
