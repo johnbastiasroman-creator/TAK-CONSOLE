@@ -40,7 +40,7 @@
 {%- endmacro %}
 
 {% macro control_buttons(m, actions, status) -%}
-{% if status.installed %}
+{% if status.installed and can('service_control') %}
 <div class="btnrow">
   {% for verb, a in actions.items() %}
   <button class="btn small" type="button" data-action="/api/m/{{ m.key }}/action/{{ verb }}">{{ a[0] }}</button>
@@ -50,6 +50,7 @@
 {%- endmacro %}
 
 {% macro uninstall_panel(m) -%}
+{% if can('admin') %}
 <section class="panel">
   <h2>Retirar {{ m.name }}</h2>
   <p>Detiene el servicio y quita sus reglas de firewall. Los datos se conservan en disco.</p>
@@ -66,6 +67,7 @@
     </form>
   </dialog>
 </section>
+{% endif %}
 {%- endmacro %}
 
 {% macro monitor_panel(m, status) -%}
@@ -97,6 +99,15 @@
     <pre tabindex="0" data-mon-pre aria-label="Registro de {{ m.name }}">Consultando…</pre>
   </div>
   <p class="muted mon-foot" data-mon-foot></p>
+</section>
+{% endif %}
+{%- endmacro %}
+
+{# Aviso para quien no administra: el servicio aún no está desplegado y desplegar es de administrador. #}
+{% macro not_deployed_note(status) -%}
+{% if not status.installed and not can('admin') %}
+<section class="panel"><h2>Servicio sin desplegar</h2>
+  <p class="muted">Este servicio todavía no está instalado. Solo un administrador puede desplegarlo; cuando lo haga, aquí verás su estado.</p>
 </section>
 {% endif %}
 {%- endmacro %}

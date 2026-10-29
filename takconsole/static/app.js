@@ -19,7 +19,7 @@
 
   function clearErrors(form) {
     $$(".field.invalid", form).forEach((f) => f.classList.remove("invalid"));
-    $$(".form-error", form).forEach((e) => e.remove());
+    $$(".form-error, .form-ok", form).forEach((e) => e.remove());
   }
 
   function showErrors(form, data) {
@@ -133,6 +133,13 @@
       if (!data.ok) { showErrors(form, data); return; }
       if (form.hasAttribute("data-close")) form.closest("dialog")?.close();
       $$('input[type="password"]', form).forEach((i) => (i.value = ""));
+      if (form.dataset.success) {
+        const ok = document.createElement("div");
+        ok.className = "note form-ok";
+        ok.setAttribute("role", "status");
+        ok.textContent = form.dataset.success;
+        (form.querySelector(".formfoot") || form).insertAdjacentElement("beforebegin", ok);
+      }
       startedJob(form.hasAttribute("data-reload"));
     });
   });
@@ -211,6 +218,11 @@
     });
   });
 
+  $$("[data-toggle]").forEach((a) => a.addEventListener("click", (ev) => {
+    ev.preventDefault();
+    const row = document.getElementById(a.dataset.toggle);
+    if (row) row.hidden = !row.hidden;
+  }));
   $$("[data-open]").forEach((btn) => btn.addEventListener("click", () => document.getElementById(btn.dataset.open)?.showModal()));
   $$("[data-dismiss]").forEach((btn) => btn.addEventListener("click", () => btn.closest("dialog")?.close()));
 

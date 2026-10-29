@@ -21,11 +21,11 @@ import urllib.request
 from datetime import datetime
 from pathlib import Path
 
-from flask import abort, jsonify, request, send_file, session
+from flask import abort, g, jsonify, request, send_file, session
 from werkzeug.utils import secure_filename
 
 from .. import config
-from ..core import auth, monitor, settings, system, validate
+from ..core import auth, monitor, rbac, settings, system, validate
 from ..core.jobs import JOBS, Busy, JobFailed
 from ..core.shell import CommandError, capture, run, which
 from . import takserver_files as tf
@@ -989,6 +989,12 @@ class TakServer(Module):
         if not re.fullmatch(validate.CLIENT_NAME, user):
             abort(404)
         st = self.state()
+        # Solo el administrador puede empaquetar cualquier certificado (por ejemplo «admin», que
+        # da acceso a la administración de TAK). Los demás, únicamente los usuarios creados
+        # desde esta consola.
+        if not rbac.allowed(g.get("role", ""), rbac.ADMIN):
+            if user.lower() not in {str(u.get("name", "")).lower() for u in st.get("users", [])}:
+                abort(404)
         int_ca = self.int_ca()
         user_p12 = FILES / f"{user}.p12"
         trust = FILES / f"truststore-{int_ca}.p12" if int_ca else None

@@ -1,0 +1,34 @@
+{% extends "base.html" %}
+{% from "_macros.html" import input %}
+{% block title %}Mi cuenta{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Mi cuenta</h1><p>{{ current_user.username }} · {{ role_label }}</p></div>
+</div>
+
+<div class="module single">
+  <div>
+    <section class="panel">
+      <h2>Tu rol</h2>
+      <p>{{ role_about }}</p>
+      <dl class="facts">
+        <dt>Usuario</dt><dd>{{ current_user.username }}</dd>
+        <dt>Rol</dt><dd>{{ role_label }}</dd>
+      </dl>
+    </section>
+
+    <section class="panel">
+      <h2>Cambiar mi contraseña</h2>
+      <p>Mínimo {{ min_password }} caracteres. Al cambiarla se cierran tus otras sesiones abiertas.</p>
+      <form data-api="/api/cuenta/password" data-success="Contraseña cambiada. Tus otras sesiones se cerraron.">
+        {{ input('current_password', 'Contraseña actual', type='password', autocomplete='current-password') }}
+        <div class="grid2">
+          {{ input('new_password', 'Contraseña nueva', type='password', autocomplete='new-password') }}
+          {{ input('repeat_password', 'Repite la contraseña nueva', type='password', autocomplete='new-password') }}
+        </div>
+        <div class="formfoot"><button class="btn primary" type="submit">Cambiar contraseña</button></div>
+      </form>
+    </section>
+  </div>
+</div>
+{% endblock %}

@@ -27,6 +27,15 @@ def data_dir(tmp_path, monkeypatch):
     return tmp_path
 
 
+@pytest.fixture(autouse=True)
+def _reset_lockout():
+    """El bloqueo por IP vive en memoria del proceso: que una prueba no afecte a la siguiente."""
+    from takconsole.core import auth
+    auth._FAILS.clear()
+    yield
+    auth._FAILS.clear()
+
+
 @pytest.fixture()
 def client(data_dir):
     from takconsole import create_app

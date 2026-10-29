@@ -86,7 +86,7 @@ mkdir -p "$DATA"
 chmod 700 "$DATA"
 export TAKCONSOLE_DATA_DIR="$DATA"
 cd "$BASE"
-if [[ -f "$DATA/config/auth.json" ]]; then
+if [[ -f "$DATA/config/users.json" || -f "$DATA/config/auth.json" ]]; then
   ok "Contraseña ya definida (cámbiala con scripts/reset-password.sh)"
 elif [[ $RANDOM_PASS -eq 1 || ! -t 0 ]]; then
   PASS="$("$VENV/bin/python" -m takconsole.cli set-password --random)"

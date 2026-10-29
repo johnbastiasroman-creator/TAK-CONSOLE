@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
+{% from "_macros.html" import not_deployed_note, led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
 {% block title %}ZeroTier{% endblock %}
 {% block content %}
 <div class="page-head">
@@ -11,6 +11,8 @@
 
 <div class="module">
   <div>
+    {{ not_deployed_note(status) }}
+    {% if can('admin') %}
     <section class="panel">
       <h2>{{ 'Controlador y ZTNET' if st.installed else 'Desplegar el controlador' }}</h2>
       <p>Este equipo será el controlador de tus redes ZeroTier: autoriza nodos, asigna IP y define reglas. ZTNET es la interfaz web para hacerlo.</p>
@@ -42,6 +44,8 @@
       </details>
     </section>
 
+    {% endif %}
+
     {% if st.installed %}
     <section class="panel">
       <h2>Este servidor en la red</h2>
@@ -51,6 +55,7 @@
         <dt>Versión</dt><dd>{{ info.version or '—' }}</dd>
         <dt>En línea</dt><dd>{{ 'sí' if info.online else 'no' }}</dd>
       </dl>
+      {% if can('zerotier_net') %}
       <form data-api="/api/m/zerotier/join" data-reload class="mt">
         <div class="grid2">
           {{ input('nwid', 'ID de red', placeholder='16 caracteres hexadecimales', attrs='maxlength=16') }}
@@ -58,15 +63,16 @@
         </div>
         <div class="formfoot"><button class="btn" type="submit">Unirse a la red</button></div>
       </form>
+      {% endif %}
       {% if networks %}
       <table class="list">
-        <thead><tr><th>Red</th><th>Estado</th><th>Interfaz</th><th>IP</th><th></th></tr></thead>
+        <thead><tr><th>Red</th><th>Estado</th><th>Interfaz</th><th>IP</th>{% if can('zerotier_net') %}<th></th>{% endif %}</tr></thead>
         <tbody>
         {% for n in networks %}
           <tr><td>{{ n.name or '—' }}<br><span class="mono muted">{{ n.id }}</span></td>
             <td>{{ n.status }}</td><td class="mono">{{ n.iface or '—' }}</td>
             <td class="mono">{{ n.addresses | join(', ') or '—' }}</td>
-            <td><form data-api="/api/m/zerotier/leave" data-reload data-confirm="¿Salir de la red {{ n.id }}?"><input type="hidden" name="nwid" value="{{ n.id }}"><button class="btn small" type="submit">Salir</button></form></td></tr>
+            {% if can('zerotier_net') %}<td><form data-api="/api/m/zerotier/leave" data-reload data-confirm="¿Salir de la red {{ n.id }}?"><input type="hidden" name="nwid" value="{{ n.id }}"><button class="btn small" type="submit">Salir</button></form></td>{% endif %}</tr>
         {% endfor %}
         </tbody>
       </table>
@@ -76,6 +82,7 @@
       {% endif %}
     </section>
 
+    {% if can('admin') %}
     <section class="panel">
       <h2>Raíces de la red (planet)</h2>
       <p>Las raíces ayudan a los nodos a encontrarse a través de NAT. Puedes usar las de ZeroTier Inc. o un planet propio.</p>
@@ -99,6 +106,8 @@
       </div>
       <p class="muted mt">Cada cliente con planet privado necesita el archivo en su carpeta de ZeroTier (Linux: /var/lib/zerotier-one/planet; Windows: %PROGRAMDATA%\ZeroTier\One\planet) y reiniciar el servicio.</p>
     </section>
+
+    {% endif %}
 
     <section class="panel">
       <h2>Registros</h2>
