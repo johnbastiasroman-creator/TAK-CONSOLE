@@ -178,6 +178,63 @@
     });
   });
 
+  // ── Archivo elegido → se envía solo (recuadros del pie de página) ────────
+  $$("input[type=file][data-autosubmit]").forEach((input) => {
+    input.addEventListener("change", () => { if (input.files.length) input.form.requestSubmit(); });
+  });
+
+  // ── Pie de página: reordenar imágenes arrastrando (o con las flechas) ─────
+  const footEditor = $("[data-footer-editor]");
+  if (footEditor) {
+    const total = $$(".fslot", footEditor).length;
+    let dragFrom = 0;
+    const slotOf = (el) => Number(el.closest(".fslot").dataset.slot);
+    async function swapSlots(from, to) {
+      if (!from || !to || from === to || to < 1 || to > total) return;
+      // «el recuadro i pasa a mostrar lo que había en order[i-1]»: aquí, un intercambio
+      const order = Array.from({ length: total }, (_, i) => i + 1);
+      order[from - 1] = to;
+      order[to - 1] = from;
+      const fd = new FormData();
+      fd.append("order", order.join(","));
+      const { data } = await post(footEditor.dataset.orderUrl, fd);
+      if (!data.ok) { window.alert(data.error || "No se pudo cambiar el orden"); return; }
+      location.reload();
+    }
+    $$(".fslot-box img", footEditor).forEach((img) => {
+      img.addEventListener("dragstart", (ev) => {
+        dragFrom = slotOf(img);
+        ev.dataTransfer.effectAllowed = "move";
+        ev.dataTransfer.setData("text/plain", String(dragFrom));
+        img.classList.add("dragging");
+      });
+      img.addEventListener("dragend", () => {
+        dragFrom = 0;
+        img.classList.remove("dragging");
+        $$(".fslot-box.over", footEditor).forEach((b) => b.classList.remove("over"));
+      });
+    });
+    $$(".fslot-box", footEditor).forEach((box) => {
+      box.addEventListener("dragover", (ev) => {
+        if (!dragFrom) return;            // un archivo arrastrado desde fuera no es un movimiento
+        ev.preventDefault();
+        ev.dataTransfer.dropEffect = "move";
+        box.classList.add("over");
+      });
+      box.addEventListener("dragleave", () => box.classList.remove("over"));
+      box.addEventListener("drop", (ev) => {
+        ev.preventDefault();
+        box.classList.remove("over");
+        const from = dragFrom;
+        dragFrom = 0;
+        swapSlots(from, slotOf(box));
+      });
+    });
+    $$("[data-move]", footEditor).forEach((btn) => {
+      btn.addEventListener("click", () => { const n = slotOf(btn); swapSlots(n, n + Number(btn.dataset.move)); });
+    });
+  }
+
   // ── Botones de acción ─────────────────────────────────────────────────────
   $$("[data-action]").forEach((btn) => {
     btn.addEventListener("click", async () => {

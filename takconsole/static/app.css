@@ -38,6 +38,7 @@ body {
   margin: 0; background: var(--bg); color: var(--text);
   font: 400 15px/1.55 var(--body);
   min-height: 100vh;
+  display: flex; flex-direction: column;   /* el pie de página queda abajo aunque la página sea corta */
 }
 a { color: var(--accent); text-underline-offset: 3px; }
 a:hover { color: color-mix(in srgb, var(--accent) 80%, white); }
@@ -53,11 +54,11 @@ small, .muted { color: var(--muted); }
 .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 
 /* ── Estructura ─────────────────────────────────────────────────────────── */
-.shell { display: grid; grid-template-columns: 232px 1fr; min-height: 100vh; }
+.shell { display: grid; grid-template-columns: 232px 1fr; flex: 1 0 auto; }
 .rail {
   background: #18201c; border-right: 1px solid var(--line-soft);
   padding: 22px 14px; display: flex; flex-direction: column; gap: 18px;
-  position: sticky; top: 0; height: 100vh; align-self: start;
+  position: sticky; top: 0; height: min(100vh, 100%); align-self: start;
 }
 .brand { display: flex; align-items: baseline; gap: 8px; padding: 0 8px; text-decoration: none; color: var(--text); }
 .brand strong { font: 700 22px/1 var(--display); letter-spacing: 0.02em; }
@@ -234,7 +235,7 @@ dialog::backdrop { background: rgba(8, 12, 10, .7); }
 dialog h2 { margin-bottom: 8px; }
 
 /* ── Login ──────────────────────────────────────────────────────────────── */
-.login { min-height: 100vh; display: grid; place-items: center; padding: 24px 16px; }
+.login { flex: 1 0 auto; display: grid; place-items: center; padding: 24px 16px; }
 .login .card { width: 100%; max-width: 380px; }
 .login .brand { padding: 0; margin-bottom: 26px; }
 .login .brand strong { font-size: 30px; }
@@ -324,3 +325,32 @@ tr.manage > td { background: #1f2723; padding: 14px 16px; }
 .brandpreview .none { color: var(--faint); font-size: 14px; }
 .swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); vertical-align: -4px; margin-right: 6px; }
 @media (max-width: 640px) { .hero-logo { max-height: 60px; max-width: 110px; padding-right: 12px; } .page-head .title.hero { gap: 12px; } }
+
+/* ── Pie de página ──────────────────────────────────────────────────────── */
+.sitefoot { border-top: 1px solid var(--line-soft); padding: 20px 24px 22px; text-align: center; }
+.footgrid { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 14px; max-width: 780px;
+  margin: 0 auto; align-items: center; }
+.footcell { display: flex; align-items: center; justify-content: center; min-width: 0; }
+.footcell img { max-height: 56px; max-width: 100%; width: auto; height: auto; object-fit: contain; }
+.foottext { margin: 0 auto; max-width: none; color: var(--muted); font-size: 16px; line-height: 1.4; }
+.footgrid + .foottext { margin-top: 14px; }
+
+/* Editor del pie (Apariencia): aquí sí se ven los recuadros */
+.footeditor { display: grid; grid-template-columns: repeat(7, minmax(104px, 1fr)); gap: 10px; overflow-x: auto; padding-bottom: 6px; }
+.fslot { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.fslot-box { position: relative; height: 104px; display: flex; align-items: center; justify-content: center;
+  border: 1px dashed var(--line); border-radius: var(--r-md); background: var(--bg); padding: 22px 6px 6px; }
+.fslot.center .fslot-box { border-color: var(--accent); }
+.fslot-box.over { border-style: solid; border-color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, var(--bg)); }
+.fslot-box img { max-width: 100%; max-height: 100%; object-fit: contain; cursor: grab; }
+.fslot-box img.dragging { opacity: .35; }
+.fslot-box .none { color: var(--faint); font-size: 13px; }
+.fslot-n { position: absolute; top: 4px; left: 6px; font-size: 11.5px; color: var(--muted); }
+.fslot.center .fslot-n { color: var(--accent); }
+.fslot form .field { margin: 0; }
+.fslot-up { position: relative; width: 100%; justify-content: center; cursor: pointer; }
+.fslot-up:focus-within { outline: 2px solid var(--accent); outline-offset: 2px; }
+.fslot-tools { display: flex; gap: 4px; justify-content: space-between; }
+.fslot-tools .btn { padding-left: 8px; padding-right: 8px; }
+.fslot-tools .btn:disabled { opacity: .35; cursor: default; }
+@media (max-width: 640px) { .footgrid { gap: 6px; } .footcell img { max-height: 36px; } .foottext { font-size: 14px; } }

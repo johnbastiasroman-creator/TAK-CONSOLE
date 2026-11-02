@@ -368,3 +368,238 @@ def test_ruta_publica_del_logo_de_ingreso_y_permisos(data_dir):
     c = login(app, "oper")
     assert c.post("/api/apariencia/imagen/login", headers={"X-CSRF-Token": c.csrf}).status_code == 403
     assert c.post("/api/apariencia/imagen/login/borrar", headers={"X-CSRF-Token": c.csrf}).status_code == 403
+
+
+# ── pie de página: texto y fila de 7 imágenes ───────────────────────────────
+def png(n):
+    """PNG distinguible (misma firma, un byte final distinto)."""
+    return PNG + bytes([n])
+
+
+def foot_upload(client, slot, data, filename="x.png"):
+    return client.post(f"/api/apariencia/pie/imagen/{slot}", headers={"X-CSRF-Token": client.csrf},
+                       data={"file": (io.BytesIO(data), filename)}, content_type="multipart/form-data")
+
+
+def footer_files():
+    return sorted(p.name for p in config.BRANDING_DIR.glob("footer-*.*"))
+
+
+@pytest.mark.parametrize("order", ["1,2,3,4,5,6,7", "7,6,5,4,3,2,1", "2,1,3,4,5,6,7", " 3 , 1,2,4,5,6,7"])
+def test_orden_valido(order):
+    assert sorted(branding.parse_order(order)) == [1, 2, 3, 4, 5, 6, 7]
+
+
+@pytest.mark.parametrize("order", ["", "1,2,3", "1,2,3,4,5,6", "1,2,3,4,5,6,7,8", "1,1,3,4,5,6,7", "0,1,2,3,4,5,6",
+                                   "1,2,3,4,5,6,8", "a,b,c,d,e,f,g", "1;2;3;4;5;6;7", "1,2,3,4,5,6,-7", None])
+def test_orden_invalido(order):
+    with pytest.raises(ValueError):
+        branding.parse_order(order)
+
+
+def test_siete_recuadros_vacios_por_defecto(data_dir):
+    b = branding.get()
+    assert [s["n"] for s in b["footer_slots"]] == [1, 2, 3, 4, 5, 6, 7]
+    assert all(s["url"] is None for s in b["footer_slots"]) and not b["show_footer"] and not b["customized"]
+
+
+def test_imagen_en_un_recuadro_conserva_el_sitio_de_los_demas(data_dir):
+    branding.set_footer_image(2, png(2))
+    branding.set_footer_image(7, png(7))
+    urls = [s["url"] for s in branding.get()["footer_slots"]]
+    assert [u is not None for u in urls] == [False, True, False, False, False, False, True]
+    assert branding.get()["show_footer"] and branding.get()["customized"]
+    assert branding.footer_image(2)[0].read_bytes() == png(2) and branding.footer_image(1) is None
+    assert all(stat.S_IMODE(os.stat(config.BRANDING_DIR / f).st_mode) == 0o600 for f in footer_files())
+
+
+def test_reemplazar_o_quitar_no_deja_archivos_huerfanos(data_dir):
+    branding.set_footer_image(3, png(1))
+    branding.set_footer_image(3, SVG)
+    assert len(footer_files()) == 1 and branding.footer_image(3)[1] == "image/svg+xml"
+    branding.clear_footer_image(3)
+    assert footer_files() == [] and branding.footer_image(3) is None
+
+
+@pytest.mark.parametrize("slot", [0, 8, -1, 100, "1", None, 1.0])
+def test_recuadro_fuera_de_rango(data_dir, slot):
+    with pytest.raises(ValueError):
+        branding.set_footer_image(slot, PNG)
+    with pytest.raises(ValueError):
+        branding.clear_footer_image(slot)
+
+
+def test_imagenes_del_pie_se_validan_por_contenido(data_dir):
+    for bad in (ICO, b"MZ\x90\x00" + b"\x00" * 64, b"", svg("<script>alert(1)</script>"),
+                svg('<image href="http://evil.example/x.png"/>'), PNG + b"\x00" * branding.FOOTER_MAX_BYTES):
+        with pytest.raises(ValueError):
+            branding.set_footer_image(1, bad)
+    assert footer_files() == []
+    for good in (PNG, JPG, WEBP, SVG):
+        branding.set_footer_image(1, good)
+
+
+def test_reordenar_mueve_el_contenido_y_conserva_los_vacios(data_dir):
+    for n in (1, 2, 5):
+        branding.set_footer_image(n, png(n))
+    branding.reorder_footer("5,2,3,4,1,6,7")                      # intercambia 1 y 5
+    assert branding.footer_image(1)[0].read_bytes() == png(5)
+    assert branding.footer_image(5)[0].read_bytes() == png(1)
+    assert branding.footer_image(2)[0].read_bytes() == png(2)
+    branding.reorder_footer("1,2,6,4,5,3,7")                      # mover a un recuadro vacío: 3 ↔ 6
+    assert branding.footer_image(6) is None and branding.footer_image(3) is None
+    branding.reorder_footer("1,2,5,4,3,6,7")                      # 3 ↔ 5: la imagen de 5 pasa a 3
+    assert branding.footer_image(3)[0].read_bytes() == png(1) and branding.footer_image(5) is None
+    assert len(footer_files()) == 3
+
+
+def test_orden_invalido_no_cambia_nada(data_dir):
+    branding.set_footer_image(1, png(1))
+    before = [s["url"] for s in branding.get()["footer_slots"]]
+    with pytest.raises(ValueError):
+        branding.reorder_footer("1,1,3,4,5,6,7")
+    assert [s["url"] for s in branding.get()["footer_slots"]] == before
+
+
+@pytest.mark.parametrize("text", ["Todos los derechos reservados", "© 2026 Armada — Ñandú / Base 1", "x" * 200])
+def test_texto_del_pie_valido(text):
+    assert branding.check_footer_text(text) == text
+
+
+@pytest.mark.parametrize("text", ["x" * 201, "<b>hola</b>", "uno\ndos", "a\x00b", "a\tb", "ver <script>"])
+def test_texto_del_pie_invalido(text):
+    with pytest.raises(ValueError):
+        branding.check_footer_text(text)
+
+
+def test_settings_manipulado_no_permite_leer_otros_archivos(data_dir):
+    settings.replace_section("branding", {"rev": 1, "footer": [
+        {"file": "../../../etc/passwd", "mime": "text/plain"}, {"file": "logo.png", "mime": "image/png"},
+        {"file": "footer-000000000000.png", "mime": "image/png"}, "texto", None, 7, {"mime": "x"}]})
+    (config.BRANDING_DIR / "logo.png").write_bytes(PNG)
+    assert all(s is None for s in branding._footer_slots(settings.section("branding")))
+    assert not branding.get()["footer_has_images"]
+
+
+def test_restablecer_borra_el_pie(data_dir):
+    branding.set_footer_text("Hola")
+    for n in (1, 4, 7):
+        branding.set_footer_image(n, png(n))
+    branding.reset()
+    assert footer_files() == [] and not branding.get()["show_footer"] and branding.get()["footer_text"] == ""
+
+
+# ── HTTP ────────────────────────────────────────────────────────────────────
+def test_imagenes_del_pie_son_publicas_y_seguras(client):
+    assert foot_upload(client, 4, png(4)).status_code == 200
+    anon = client.application.test_client()
+    r = anon.get("/branding/footer/4")
+    assert r.status_code == 200 and r.mimetype == "image/png" and r.data == png(4)
+    assert r.headers["X-Content-Type-Options"] == "nosniff" and "sandbox" in r.headers["Content-Security-Policy"]
+    for path in ("/branding/footer/1", "/branding/footer/0", "/branding/footer/8"):
+        assert anon.get(path).status_code == 404, path                       # recuadro vacío o fuera de rango
+    for path in ("/branding/footer/-1", "/branding/footer/x"):               # ni siquiera es una ruta: como cualquier
+        assert anon.get(path).status_code in (302, 404), path                # otra desconocida, no entrega nada
+
+
+def test_subida_al_pie_por_http_valida_recuadro_y_contenido(client):
+    assert foot_upload(client, 0, PNG).status_code == 404 and foot_upload(client, 8, PNG).status_code == 404
+    r = foot_upload(client, 2, b"MZ" + b"\x00" * 80, "foto.png")
+    assert r.status_code == 400 and "no reconocido" in r.get_json()["errors"]["file"]
+    assert foot_upload(client, 2, svg("<script>1</script>")).status_code == 400
+    assert foot_upload(client, 2, ICO, "f.ico").status_code == 400
+    assert client.post("/api/apariencia/pie/imagen/2", headers={"X-CSRF-Token": client.csrf}).status_code == 400
+    r = foot_upload(client, 2, PNG + b"\x00" * (branding.FOOTER_MAX_BYTES + 1024))
+    assert r.status_code in (400, 413) and footer_files() == []
+    assert foot_upload(client, 2, PNG, "foto.svg").status_code == 200
+
+
+def test_orden_por_http(client):
+    foot_upload(client, 1, png(1))
+    foot_upload(client, 2, png(2))
+    assert post(client, "/api/apariencia/pie/orden", order="2,1,3,4,5,6,7").status_code == 200
+    anon = client.application.test_client()
+    assert anon.get("/branding/footer/1").data == png(2) and anon.get("/branding/footer/2").data == png(1)
+    for bad in ("", "1,2", "1,1,3,4,5,6,7", "x"):
+        r = post(client, "/api/apariencia/pie/orden", order=bad)
+        assert r.status_code == 400 and r.get_json()["ok"] is False
+    assert anon.get("/branding/footer/1").data == png(2)                      # nada cambió
+
+
+def test_texto_del_pie_por_http(client):
+    r = post(client, "/api/apariencia/pie/texto", footer_text="<script>alert(1)</script>")
+    assert r.status_code == 400 and "footer_text" in r.get_json()["errors"]
+    assert post(client, "/api/apariencia/pie/texto", footer_text="Todos los derechos reservados").status_code == 200
+    assert branding.get()["footer_text"] == "Todos los derechos reservados"
+    assert post(client, "/api/apariencia/pie/texto", footer_text="").status_code == 200
+    assert branding.get()["footer_text"] == ""
+
+
+def test_pie_se_dibuja_en_todas_las_paginas_con_siete_recuadros(client):
+    assert 'class="sitefoot"' not in client.get("/").get_data(as_text=True)         # nada configurado, nada dibujado
+    foot_upload(client, 1, png(1))
+    foot_upload(client, 4, png(4))
+    foot_upload(client, 7, png(7))
+    post(client, "/api/apariencia/pie/texto", footer_text="Todos los derechos reservados")
+    anon = client.application.test_client()
+    for page in (client.get("/").get_data(as_text=True), client.get("/m/mumble").get_data(as_text=True),
+                 anon.get("/login").get_data(as_text=True)):
+        assert page.count('class="footcell"') == 7
+        cells = re.findall(r'<div class="footcell">(.*?)</div>', page, re.S)
+        assert [("img" in c) for c in cells] == [True, False, False, True, False, False, True]   # el 4 es el central
+        assert '/branding/footer/4?v=' in cells[3]
+        assert 'class="foottext">Todos los derechos reservados</p>' in page
+
+
+def test_pie_solo_con_texto_o_solo_con_imagenes(client):
+    post(client, "/api/apariencia/pie/texto", footer_text="Solo texto")
+    page = client.get("/").get_data(as_text=True)
+    assert 'class="sitefoot"' in page and "footgrid" not in page and "Solo texto" in page
+    post(client, "/api/apariencia/pie/texto", footer_text="")
+    foot_upload(client, 3, png(3))
+    page = client.get("/").get_data(as_text=True)
+    assert "footgrid" in page and "foottext" not in page
+
+
+def test_texto_del_pie_se_escapa(client, data_dir):
+    settings.replace_section("branding", {"rev": 1, "footer_text": "<img src=x onerror=alert(1)>"})
+    page = client.get("/").get_data(as_text=True)
+    assert "<img src=x" not in page and "&lt;img src=x" in page
+
+
+def test_editor_muestra_siete_recuadros_con_el_cuarto_al_centro(client):
+    foot_upload(client, 2, png(2))
+    page = client.get("/apariencia").get_data(as_text=True)
+    assert len(re.findall(r'class="fslot[ "]', page)) == 7
+    assert re.search(r'class="fslot center" data-slot="4"', page)
+    assert 'draggable="true"' in page and page.count('draggable="true"') == 1       # solo el recuadro con imagen
+    assert 'data-order-url="/api/apariencia/pie/orden"' in page
+    assert len(re.findall(r'data-move="-1"[^>]*disabled', page)) == 1 and len(re.findall(r'data-move="1"[^>]*disabled', page)) == 1
+    assert '/api/apariencia/pie/imagen/2/borrar' in page and '/api/apariencia/pie/imagen/3/borrar' not in page
+
+
+def test_operador_y_observador_no_tocan_el_pie_pero_lo_ven(data_dir):
+    from takconsole import create_app
+    from takconsole.core import auth, users
+    from tests.test_roles import login, PW
+    auth.set_password(PW)
+    users.create("oper", PW, "operator")
+    users.create("mira", PW, "viewer")
+    branding.set_footer_image(4, png(4))
+    branding.set_footer_text("Pie visible")
+    app = create_app()
+    for name in ("oper", "mira"):
+        c = login(app, name)
+        assert "Pie visible" in c.get("/").get_data(as_text=True)                    # lo ven
+        h = {"X-CSRF-Token": c.csrf}
+        for path in ("/api/apariencia/pie/texto", "/api/apariencia/pie/imagen/1", "/api/apariencia/pie/imagen/4/borrar",
+                     "/api/apariencia/pie/orden"):
+            assert c.post(path, headers=h, data={"order": "1,2,3,4,5,6,7"}).status_code == 403, (name, path)
+        assert branding.footer_image(4) is not None and branding.get()["footer_text"] == "Pie visible"
+
+
+def test_auditoria_registra_el_reordenamiento_sin_el_contenido(client):
+    post(client, "/api/apariencia/pie/orden", order="2,1,3,4,5,6,7")
+    post(client, "/api/apariencia/pie/texto", footer_text="texto-privado-del-pie")
+    log = (config.LOG_DIR / "audit.log").read_text()
+    assert "/api/apariencia/pie/orden" in log and "texto-privado-del-pie" not in log

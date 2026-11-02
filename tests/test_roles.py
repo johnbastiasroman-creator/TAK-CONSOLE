@@ -145,7 +145,7 @@ def clients(app):
 
 # (método, ruta, endpoint, permiso esperado)
 SAMPLE = {"key": "mediamtx", "verb": "restart", "what": "root-ca.pem", "user": "alfa-01", "name": "mira",
-          "kind": "logo"}
+          "kind": "logo", "slot": "1"}
 
 
 def build(app, endpoint):
