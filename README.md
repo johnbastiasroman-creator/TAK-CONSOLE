@@ -5,6 +5,7 @@ Consola web para desplegar y administrar, desde el navegador, un servidor de ope
 - **TAK Server**: instalación desde el paquete `.deb` oficial, con autoridad certificadora propia, enrolamiento y paquetes de conexión para ATAK e iTAK.
 - **MediaMTX**: video en vivo (RTSP, RTMP, SRT, HLS, WebRTC), por defecto sin usuario ni contraseña para publicar ni para ver (se puede exigir autenticación).
 - **Mumble**: voz por canales, compatible con el plugin ATAK Vx, Mumla y el cliente Mumble.
+- **Jitsi Meet**: videollamadas en el navegador con salas por enlace (opcional, acceso abierto).
 - **ZeroTier local**: controlador propio con la interfaz web ZTNET, raíces públicas o raíz privada (planet) a elección.
 
 Una clonación, una contraseña, una URL. La inspiración de diseño es [infra-TAK](https://github.com/takwerx/infra-TAK); este proyecto es una implementación independiente, sin código copiado de él.
@@ -53,6 +54,7 @@ Se puede volver a ejecutar para reparar o actualizar. Para recuperar el acceso: 
         ↓        Crea usuarios y descarga sus paquetes de conexión con la IP ZeroTier.
 3. MediaMTX      Video. Opcional: RTSPS con certificado de la CA de TAK.
    Mumble        Voz. Opcional: certificado firmado por la CA de TAK.
+   Jitsi Meet    Videollamadas en el navegador. Opcional.
         ↓
 4. Red y firewall  Limita los servicios a ZeroTier (y opcionalmente a una LAN) y activa UFW.
 ```
@@ -110,6 +112,17 @@ Si vuelves a ejecutar el despliegue sin subir un `.deb` nuevo, se reconfigura la
 - Contraseña de servidor opcional, nombre del canal raíz, mensaje de bienvenida y límite de usuarios.
 - Certificado opcional firmado por la CA de TAK, para que los equipos que ya confían en esa CA validen también la voz.
 - Clientes: [ATAK Plugin: Vx](https://play.google.com/store/apps/details?id=com.atakmap.android.gbr.vx.plugin) (TAK Product Center; funciona con servidores Mumble/Murmur o en multicast), [Mumla](https://f-droid.org/packages/se.lublin.mumla) en Android y Mumble de escritorio.
+
+### Jitsi Meet
+
+- Compose oficial de [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) (etiqueta `stable-11248-2`, Apache-2.0), incluido tal cual en `takconsole/modules/jitsi_compose.upstream.yml`: cuatro contenedores (web, Prosody, Jicofo y videopuente) con imágenes de `ghcr.io/jitsi` fijadas a esa versión. La instalación por paquetes `apt` de Jitsi exige Ubuntu 24.04 o posterior según su guía oficial, y esta consola usa Ubuntu 22.04, por eso se usa Docker.
+- **No usa red de host**: los cuatro contenedores hablan por una red interna de Docker. Docker publica sus puertos saltándose UFW, así que **la política de «Red y firewall» no se aplica a Jitsi**; en su lugar eliges en el formulario las direcciones IP del servidor donde escuchan la web (HTTPS, 443 por defecto) y el audio/video (10000/udp). El XMPP y la API de Jicofo no se publican; la API REST del videopuente solo en `127.0.0.1:18080`.
+- **Una sola dirección de acceso**: la web de Jitsi se conecta a la dirección indicada en el formulario (`PUBLIC_URL`), así que todos los usuarios deben abrir esa misma dirección. Puede ser una IP del servidor (p. ej. la de ZeroTier) o un nombre que tus equipos resuelvan.
+- **Acceso abierto**: sin autenticación, cualquiera que llegue a la dirección crea salas. Limita las IP donde escucha o usa una red de confianza.
+- **Certificado**: autofirmado por defecto (el navegador pide aceptarlo y, según la guía de Jitsi, las apps móviles no se conectan con él) o firmado por la CA de TAK. WebRTC exige HTTPS.
+- **STUN público desactivado** por defecto (`JVB_DISABLE_STUN`): el videopuente no consulta servidores de Internet; los candidatos son las IP elegidas (`JVB_ADVERTISE_IPS`). Márcalo solo si lo necesitas.
+- Las contraseñas internas entre componentes se generan al desplegar (como hace `gen-passwords.sh` del proyecto) y se conservan en los redespliegues. Al desinstalar se conserva `stacks/jitsi/config`.
+- Requiere internet para descargar las imágenes de `ghcr.io`.
 
 ### ZeroTier local
 
@@ -203,11 +216,12 @@ Seguridad de lo que se sube: el tipo se decide por el **contenido** del archivo,
 | 8888/tcp | MediaMTX HLS | Según política (si está activo) |
 | 8889/tcp, 8189/udp | MediaMTX WebRTC | Según política (si está activo) |
 | 64738/tcp+udp | Mumble | Según política |
-| 127.0.0.1 | 3000 (ZTNET), 5434 (PostgreSQL de ZTNET), 9993/tcp (API ZeroTier), 9997 (API MediaMTX) | Solo local |
+| 443/tcp (configurable), 10000/udp | Jitsi Meet | Solo en las IP elegidas; **no** pasa por UFW |
+| 127.0.0.1 | 3000 (ZTNET), 5434 (PostgreSQL de ZTNET), 9993/tcp (API ZeroTier), 9997 (API MediaMTX), 18080 (API del videopuente de Jitsi) | Solo local |
 
 **Políticas de exposición** (página *Red y firewall*): todas las interfaces, solo ZeroTier, o ZeroTier más una red local en CIDR. Cada regla UFW de la consola lleva el comentario `tak-console:<servicio>`; las tuyas no se tocan.
 
-Docker publica puertos saltándose UFW. Por eso todos los contenedores usan `network_mode: host` o publican solo en `127.0.0.1`, y una prueba automática lo verifica.
+Docker publica puertos saltándose UFW. Por eso los contenedores usan `network_mode: host` o publican solo en `127.0.0.1`, y una prueba automática lo verifica. La única excepción es Jitsi Meet (necesita red interna entre sus cuatro contenedores): publica solo en las IP del servidor que elige el administrador, nunca en todas las interfaces, y otra prueba lo comprueba.
 
 ## Seguridad
 
@@ -271,6 +285,7 @@ TAKCONSOLE_DRY_RUN=1 TAKCONSOLE_PORT=5099 gunicorn -c gunicorn.conf.py wsgi:app 
 - **Enrolamiento por QR** (`tak://com.atakmap.app/enroll`) no está incluido: ATAK exige un certificado de servidor de confianza pública en 8446, que no aplica a una red solo ZeroTier.
 - **Solo instalación nativa (.deb)** de TAK Server. La variante Docker (`takserver-docker-*.zip`) queda para una versión futura.
 - **Mumble** no integra todavía usuarios de TAK (autenticación vía ICE) ni crea canales por grupo.
+- **Jitsi Meet sin probar con contenedores reales.** El compose se valida con `docker compose config` y los despliegues se prueban con Docker simulado, pero no se ejecutó con las imágenes de `ghcr.io/jitsi`. Sin verificar en un servidor real: arranque de los cuatro contenedores con esta configuración, audio/video entre equipos de redes distintas (ZeroTier y LAN), y la cifra de participantes que lee de `/colibri/stats` (se tomó de la documentación del videopuente). No hay autenticación de usuarios ni integración con TAK Server.
 - **La consola corre como root.** Un proceso sin privilegios con un intermediario de comandos permitidos está en la hoja de ruta.
 - **Solo Ubuntu 22.04 x86-64** probado.
 

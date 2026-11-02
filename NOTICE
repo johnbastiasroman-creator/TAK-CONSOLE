@@ -42,6 +42,17 @@ PostgreSQL 15         PostgreSQL License. https://www.postgresql.org/about/licen
 
 Caddy 2.11.7          Apache License 2.0. https://github.com/caddyserver/caddy
 
+Jitsi Meet            Apache License 2.0 (jitsi-meet, jitsi-videobridge y jicofo; LICENSE de
+  (ghcr.io/jitsi,     cada repositorio, revisado 2026-11-02). Se ejecuta en sus propios
+   docker-jitsi-meet  contenedores. La consola incluye sin cambios el docker-compose.yml de
+   stable-11248-2)    docker-jitsi-meet (Apache License 2.0), etiqueta stable-11248-2:
+                      takconsole/modules/jitsi_compose.upstream.yml
+                      https://github.com/jitsi/docker-jitsi-meet
+                      Prosody (servidor XMPP que incluye la imagen): MIT License según su
+                      ficha pública (no revisado en el texto de la licencia de la imagen).
+                      Las imágenes contienen además otros componentes (nginx, Java, etc.)
+                      con sus propias licencias; no se han auditado.
+
 Componentes incluidos en este repositorio
 -----------------------------------------
 Fuente Barlow         SIL Open Font License 1.1 (takconsole/static/fonts/OFL-Barlow.txt).
