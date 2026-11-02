@@ -3,9 +3,12 @@
 {% block title %}Panel{% endblock %}
 {% block content %}
 <div class="page-head">
-  <div>
-    <h1>{{ host.hostname }}</h1>
-    <p>{{ host.os }}{% if not host.supported %}. Esta consola está probada en Ubuntu 22.04 LTS.{% endif %}</p>
+  <div class="title hero">
+    {% if brand.logo_url %}<img class="hero-logo" src="{{ brand.logo_url }}" alt="">{% endif %}
+    <div>
+      <h1>{{ host.hostname }}</h1>
+      <p>{{ host.os }}{% if not host.supported %}. Esta consola está probada en Ubuntu 22.04 LTS.{% endif %}</p>
+    </div>
   </div>
   <div class="btnrow">
     {% if can('admin') %}<a class="btn small" href="/red">Política: {{ {'all': 'todas las interfaces', 'zerotier': 'solo ZeroTier', 'zerotier_lan': 'ZeroTier + red local'}[policy.exposure] }}</a>{% endif %}
