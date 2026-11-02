@@ -176,7 +176,7 @@ Qué no cubre: los roles protegen la consola, no los servicios. Al unir o sacar 
 En **Apariencia** (solo administrador) se personaliza la consola para que los usuarios la reconozcan como propia:
 
 - **Nombre**: sustituye a «TAK-CONSOLE» en la pestaña, el menú y la pantalla de ingreso (1 a 40 caracteres).
-- **Logo** (PNG, JPG, WEBP o SVG, hasta 512 KB): se ve en el menú y en el ingreso. Se puede ocultar el nombre si el logo ya lo incluye.
+- **Logo** (PNG, JPG, WEBP o SVG, hasta 512 KB): se ve pequeño en el menú y el ingreso, y **grande en el encabezado del panel principal**, junto al nombre del servidor. Se puede ocultar el nombre si el logo ya lo incluye.
 - **Icono de la pestaña** (PNG, ICO o SVG, hasta 256 KB). Si no lo ves cambiar, recarga con Ctrl+F5: los navegadores guardan los iconos en caché con insistencia.
 - **Color de acento**: botones, enlaces y foco. Las luces de estado y los avisos conservan su color. Se rechazan colores demasiado oscuros para leerse sobre el fondo, y el texto de los botones se elige solo (oscuro o blanco) según el contraste.
 - **Restablecer todo** vuelve a lo original. Todo se guarda en `data/branding/` y `data/config/settings.json`.

@@ -274,3 +274,25 @@ def test_auditoria_registra_el_cambio_sin_el_contenido(client):
     log = (config.LOG_DIR / "audit.log").read_text()
     assert "POST_/api/apariencia/imagen/logo" in log.replace(" ", "_") or "/api/apariencia/imagen/logo" in log
     assert "secreto-interno" not in log
+
+
+def test_logo_grande_en_el_panel_principal(client):
+    assert 'class="hero-logo"' not in client.get("/").get_data(as_text=True)      # sin logo, nada
+    upload(client, "logo", PNG)
+    page = client.get("/").get_data(as_text=True)
+    assert 'class="hero-logo" src="/branding/logo?v=' in page
+    # solo en el panel principal: el menú lateral conserva su logo pequeño
+    assert 'class="hero-logo"' not in client.get("/apariencia").get_data(as_text=True)
+    assert 'class="logo" src="/branding/logo' in page
+    post(client, "/api/apariencia/imagen/logo/borrar")
+    assert 'class="hero-logo"' not in client.get("/").get_data(as_text=True)
+
+
+def test_operador_y_observador_tambien_ven_el_logo_del_panel(data_dir):
+    from takconsole import create_app
+    from takconsole.core import auth, users
+    from tests.test_roles import login, PW
+    auth.set_password(PW)
+    users.create("mira", PW, "viewer")
+    branding.set_image("logo", PNG)
+    assert 'class="hero-logo"' in login(create_app(), "mira").get("/").get_data(as_text=True)
