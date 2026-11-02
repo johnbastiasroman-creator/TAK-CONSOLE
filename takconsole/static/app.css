@@ -313,7 +313,8 @@ tr.manage > td { background: #1f2723; padding: 14px 16px; }
 
 /* ── Apariencia ─────────────────────────────────────────────────────────── */
 .brand .logo { display: block; max-height: 36px; max-width: 150px; width: auto; height: auto; object-fit: contain; }
-.login .brand .logo { max-height: 64px; max-width: 240px; margin-bottom: 4px; }
+.login .brand.brandmark { align-items: center; text-align: center; gap: 12px; }
+.login .brand .logo { max-height: 150px; max-width: 280px; margin: 0 auto 2px; }
 .brandmark, .brand.has-logo { flex-direction: column; align-items: flex-start; gap: 6px; }
 .brand.has-logo span { margin-top: -2px; }
 .brandpreview { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--line-soft);

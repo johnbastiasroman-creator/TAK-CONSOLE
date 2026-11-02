@@ -20,11 +20,12 @@ from .. import config
 from . import settings
 
 SECTION = "branding"
-MAX_BYTES = {"logo": 512 * 1024, "favicon": 256 * 1024}
-ALLOWED = {"logo": ("png", "jpg", "webp", "svg"), "favicon": ("png", "ico", "svg")}
+MAX_BYTES = {"logo": 512 * 1024, "login": 512 * 1024, "favicon": 256 * 1024}
+ALLOWED = {"logo": ("png", "jpg", "webp", "svg"), "login": ("png", "jpg", "webp", "svg"),
+           "favicon": ("png", "ico", "svg")}
 MIME = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp",
         "ico": "image/x-icon", "svg": "image/svg+xml"}
-LABEL = {"logo": "logo", "favicon": "icono"}
+LABEL = {"logo": "logo", "login": "logo de ingreso", "favicon": "icono"}
 
 NAME_PATTERN = r"[\w .,_+&()/-]{1,40}"
 NAME_MESSAGE = "1 a 40 caracteres: letras, números, espacios y . , _ - + & ( ) /"
@@ -148,10 +149,14 @@ def get() -> dict:
         "accent": accent,
         "accent_ink": ink_for(accent) if accent else None,
         "logo_url": "/branding/logo" + q if _image_path("logo", st) else None,
+        # Logo de la pantalla de ingreso: el propio si existe; si no, el del sitio.
+        "login_logo_url": ("/branding/login" + q if _image_path("login", st)
+                           else ("/branding/logo" + q if _image_path("logo", st) else None)),
+        "has_login_logo": bool(_image_path("login", st)),
         "favicon_url": "/branding/favicon" + q if _image_path("favicon", st) else None,
         "favicon_mime": (st.get("favicon") or {}).get("mime"),
         "theme_url": "/branding/theme.css" + q,
-        "customized": bool(st.get("name") or accent or st.get("logo") or st.get("favicon")
+        "customized": bool(st.get("name") or accent or st.get("logo") or st.get("login") or st.get("favicon")
                            or st.get("show_name") is False),
     }
 
@@ -230,4 +235,5 @@ def reset():
     with _LOCK:
         for kind in ALLOWED:
             _remove_files(kind)
-        _bump({"name": None, "accent": None, "logo": None, "favicon": None, "show_name": None})
+        _bump({"name": None, "accent": None, "logo": None, "login": None, "favicon": None,
+               "show_name": None})

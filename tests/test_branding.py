@@ -296,3 +296,75 @@ def test_operador_y_observador_tambien_ven_el_logo_del_panel(data_dir):
     users.create("mira", PW, "viewer")
     branding.set_image("logo", PNG)
     assert 'class="hero-logo"' in login(create_app(), "mira").get("/").get_data(as_text=True)
+
+
+# ── logo propio para la pantalla de ingreso ─────────────────────────────────
+def test_ingreso_usa_el_logo_del_sitio_si_no_hay_uno_propio(client):
+    anon = client.application.test_client()
+    assert "/branding/" not in anon.get("/login").get_data(as_text=True).replace("/branding/theme.css", "")
+    upload(client, "logo", PNG)
+    page = anon.get("/login").get_data(as_text=True)
+    assert 'class="logo" src="/branding/logo?v=' in page and "/branding/login" not in page
+    assert not branding.get()["has_login_logo"]
+
+
+def test_logo_de_ingreso_propio_no_cambia_el_del_sitio(client):
+    upload(client, "logo", PNG)
+    r = upload(client, "login", SVG, "ingreso.svg")
+    assert r.status_code == 200 and (config.BRANDING_DIR / "login.svg").is_file()
+    assert (config.BRANDING_DIR / "logo.png").is_file()                    # el del sitio sigue intacto
+    anon = client.application.test_client()
+    login_page = anon.get("/login").get_data(as_text=True)
+    assert 'class="logo" src="/branding/login?v=' in login_page and "/branding/logo?v=" not in login_page
+    site = client.get("/").get_data(as_text=True)                          # menú y panel: logo del sitio
+    assert 'class="logo" src="/branding/logo?v=' in site and 'class="hero-logo" src="/branding/logo?v=' in site
+    assert "/branding/login" not in site
+    r = anon.get("/branding/login")
+    assert r.status_code == 200 and r.mimetype == "image/svg+xml" and "sandbox" in r.headers["Content-Security-Policy"]
+    assert anon.get("/branding/logo").mimetype == "image/png"
+
+
+def test_logo_de_ingreso_se_valida_igual_que_el_del_sitio(client):
+    assert upload(client, "login", svg("<script>alert(1)</script>")).status_code == 400
+    assert upload(client, "login", b"MZ" + b"\x00" * 80).status_code == 400
+    assert upload(client, "login", ICO).status_code == 400                 # ICO no vale para un logo
+    assert upload(client, "login", PNG + b"\x00" * branding.MAX_BYTES["login"]).status_code in (400, 413)
+    assert not list(config.BRANDING_DIR.glob("login.*"))
+
+
+def test_quitar_el_logo_de_ingreso_vuelve_al_del_sitio(client):
+    upload(client, "logo", PNG)
+    upload(client, "login", SVG, "a.svg")
+    assert post(client, "/api/apariencia/imagen/login/borrar").status_code == 200
+    assert not list(config.BRANDING_DIR.glob("login.*")) and (config.BRANDING_DIR / "logo.png").is_file()
+    assert 'src="/branding/logo?v=' in client.application.test_client().get("/login").get_data(as_text=True)
+
+
+def test_quitar_el_logo_del_sitio_no_toca_el_de_ingreso_y_restablecer_borra_ambos(client):
+    upload(client, "logo", PNG)
+    upload(client, "login", SVG, "a.svg")
+    post(client, "/api/apariencia/imagen/logo/borrar")
+    assert (config.BRANDING_DIR / "login.svg").is_file() and not list(config.BRANDING_DIR.glob("logo.*"))
+    assert branding.get()["has_login_logo"] and branding.get()["logo_url"] is None
+    assert 'class="logo" src="/branding/login?v=' in client.application.test_client().get("/login").get_data(as_text=True)
+    post(client, "/api/apariencia/restablecer")
+    assert not list(config.BRANDING_DIR.glob("*.*")) and not branding.get()["customized"]
+
+
+def test_pagina_de_apariencia_ofrece_el_logo_de_ingreso(client):
+    page = client.get("/apariencia").get_data(as_text=True)
+    assert "Logo de la pantalla de ingreso" in page and 'data-api="/api/apariencia/imagen/login"' in page
+
+
+def test_ruta_publica_del_logo_de_ingreso_y_permisos(data_dir):
+    from takconsole import create_app
+    from takconsole.core import auth, users
+    from tests.test_roles import login, PW
+    auth.set_password(PW)
+    users.create("oper", PW, "operator")
+    branding.set_image("login", PNG)
+    app = create_app()
+    assert app.test_client().get("/branding/login").status_code == 200          # público: se ve en el ingreso
+    c = login(app, "oper")
+    assert c.post("/api/apariencia/imagen/login", headers={"X-CSRF-Token": c.csrf}).status_code == 403
+    assert c.post("/api/apariencia/imagen/login/borrar", headers={"X-CSRF-Token": c.csrf}).status_code == 403

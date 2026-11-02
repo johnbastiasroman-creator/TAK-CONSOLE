@@ -284,6 +284,10 @@ def create_app():
     def branding_logo():
         return _asset("logo")
 
+    @app.route("/branding/login")
+    def branding_login():
+        return _asset("login")
+
     @app.route("/branding/favicon")
     def branding_favicon():
         return _asset("favicon")

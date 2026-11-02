@@ -14,8 +14,8 @@
   <div class="card panel">
     <div class="lamps" aria-hidden="true"><span class="led ok"></span><span class="led warn"></span><span class="led off"></span><span class="led off"></span></div>
     <div class="brand brandmark">
-      {% if brand.logo_url %}<img class="logo" src="{{ brand.logo_url }}" alt="{{ app_name if not brand.show_name else '' }}">{% endif %}
-      {% if brand.show_name or not brand.logo_url %}<strong>{{ app_name }}</strong>{% endif %}</div>
+      {% if brand.login_logo_url %}<img class="logo" src="{{ brand.login_logo_url }}" alt="{{ app_name if not brand.show_name else '' }}">{% endif %}
+      {% if brand.show_name or not brand.login_logo_url %}<strong>{{ app_name }}</strong>{% endif %}</div>
     {% if not configured %}
     <div class="note bad"><p>La consola aún no tiene contraseña. Ejecuta <code>sudo ./install.sh</code> o <code>sudo scripts/reset-password.sh</code> en el servidor.</p></div>
     {% endif %}
