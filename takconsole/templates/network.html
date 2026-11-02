@@ -13,7 +13,7 @@
   <div>
     <section class="panel">
       <h2>Exposición de los servicios</h2>
-      <p>Decide por dónde se puede llegar a TAK Server, MediaMTX, Mumble y ZTNET. SSH (puerto {{ ssh_ports | join(', ') }}), la consola ({{ console_port }}) y el transporte de ZeroTier (9993/udp) quedan siempre abiertos.</p>
+      <p>Decide por dónde se puede llegar a TAK Server, MediaMTX, Mumble y ZTNET. SSH (puerto {{ ssh_ports | join(', ') }}), la consola ({{ console_port }}) y el transporte de ZeroTier (9993/udp) quedan siempre abiertos. Jitsi Meet no depende de esta política: Docker se salta UFW, así que escucha solo en las direcciones que elijas en su módulo.</p>
       <form data-api="/api/red/policy" data-reload>
         <div class="field" data-field="exposure">
           <label class="check"><input type="radio" name="exposure" value="all" {% if policy.exposure == 'all' %}checked{% endif %}>

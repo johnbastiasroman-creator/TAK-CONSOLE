@@ -31,7 +31,7 @@ Navegador ──HTTPS:5001──▶ gunicorn (1 proceso, 8 hilos)
 | Cambios de usuarios piden la contraseña del administrador; siempre queda un administrador activo | `core/users.py`, `takconsole/__init__.py` |
 | Valores de formularios validados con listas blancas antes de llegar a archivos o comandos | `core/validate.py` |
 | Secretos ocultos en los registros | `shell.run(..., secrets=[...])` |
-| Contenedores en `network_mode: host` o publicados solo en `127.0.0.1` (Docker se salta UFW) | `compose_data()` de cada módulo + `tests/test_modules.py` |
+| Contenedores en `network_mode: host` o publicados solo en `127.0.0.1` (Docker se salta UFW). Excepción: Jitsi, solo en las IP elegidas, nunca `0.0.0.0` | `compose_data()` de cada módulo + `tests/test_modules.py`, `tests/test_jitsi.py` |
 | Reglas UFW etiquetadas `tak-console:<módulo>` | `core/firewall.py` |
 | Imágenes con versión fija, nunca `latest` | constantes `IMAGE` + prueba automática |
 | Archivos con secretos en modo 600 | `docker.write_env`, `docker.write_private`, `settings` |
