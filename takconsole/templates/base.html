@@ -6,12 +6,16 @@
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}{{ app_name }}{% endblock %} · {{ app_name }}</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='app.css') }}?v={{ app_version }}">
-  <link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ brand.theme_url }}">
+  {% if brand.favicon_url %}<link rel="icon" href="{{ brand.favicon_url }}" type="{{ brand.favicon_mime }}">
+  {% else %}<link rel="icon" href="{{ url_for('static', filename='favicon.svg') }}" type="image/svg+xml">{% endif %}
 </head>
 <body>
 <div class="shell">
   <aside class="rail">
-    <a class="brand" href="/"><strong>{{ app_name }}</strong><span>v{{ app_version }}</span></a>
+    <a class="brand{% if brand.logo_url %} has-logo{% endif %}" href="/" title="{{ app_name }}">
+      {% if brand.logo_url %}<img class="logo" src="{{ brand.logo_url }}" alt="{{ app_name if not brand.show_name else '' }}">{% endif %}
+      {% if brand.show_name or not brand.logo_url %}<strong>{{ app_name }}</strong>{% endif %}<span>v{{ app_version }}</span></a>
     <nav aria-label="Principal">
       <a href="/" {% if request.path == '/' %}aria-current="page"{% endif %}>Panel</a>
       <div class="sep"></div>
@@ -23,6 +27,7 @@
       <div class="sep"></div>
       <a href="/red" {% if request.path == '/red' %}aria-current="page"{% endif %}>Red y firewall</a>
       <a href="/usuarios" {% if request.path == '/usuarios' %}aria-current="page"{% endif %}>Usuarios</a>
+      <a href="/apariencia" {% if request.path == '/apariencia' %}aria-current="page"{% endif %}>Apariencia</a>
       {% endif %}
     </nav>
     {% if current_user %}
