@@ -38,7 +38,7 @@ Navegador ──HTTPS:5001──▶ gunicorn (1 proceso, 8 hilos)
 
 ## Roles y permisos
 
-`core/rbac.py` define los permisos (`view`, `monitor`, `service_control`, `tak_certs`, `zerotier_net`, `admin`), los tres roles y `ENDPOINT_PERMS` (endpoint de Flask → permiso). Al agregar una ruta, clasifícala ahí: `tests/test_roles.py` falla si falta. En las plantillas, `can('permiso')` decide qué se dibuja, pero eso es solo comodidad: el control real es el `before_request`, que consulta al usuario en cada petición (un cambio de rol o una cuenta desactivada valen al instante). Los secretos se omiten del HTML cuando `can('admin')` es falso, no solo se ocultan con CSS.
+`core/rbac.py` define los permisos (`view`, `monitor`, `service_control`, `tak_certs`, `zerotier_net`, `admin`), los tres roles y `ENDPOINT_PERMS` (endpoint de Flask → permiso). Al agregar una ruta, clasifícala ahí: `tests/test_roles.py` falla si falta. En las plantillas, `can('permiso')` decide qué se dibuja, pero eso es solo comodidad: el control real es el `before_request`, que consulta al usuario en cada petición (un cambio de rol o una cuenta desactivada valen al instante). Las rutas sin sesión son solo `login`, `static`, `health` y las tres de apariencia (`branding_*`), listadas en `PUBLIC_ENDPOINTS`. Los secretos se omiten del HTML cuando `can('admin')` es falso, no solo se ocultan con CSS.
 
 ## Cómo agregar un módulo
 
@@ -78,6 +78,7 @@ data/
   config/secret_key       clave de sesión de Flask (600)
   certs/console.{crt,key} HTTPS de la consola y de ZTNET
   logs/<módulo>-<fecha>.log
+  branding/               logo e icono personalizados (600); datos de apariencia en settings.json
   logs/audit.log          quién hizo qué (600, rota a 1 MB, sin contraseñas)
   uploads/takserver/      .deb, llave GPG y política subidos
   stacks/mediamtx/        compose.yaml, config/mediamtx.yml, recordings/

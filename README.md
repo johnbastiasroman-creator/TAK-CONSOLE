@@ -156,6 +156,7 @@ La consola tiene tres roles fijos. El primer usuario (`admin`, el que crea el in
 | Red y firewall, certificado HTTPS de la consola, política de TAK, planet de ZeroTier | ✔ | — | — |
 | Ver secretos (contraseñas de MediaMTX y Mumble, `admin.p12`, CA, truststore) | ✔ | — | — |
 | Gestionar usuarios | ✔ | — | — |
+| Cambiar la apariencia (nombre, logo, icono, color) | ✔ | — | — |
 
 Cómo se aplica:
 
@@ -169,6 +170,18 @@ Cómo se aplica:
 - **Instalaciones anteriores**: el único usuario de `config/auth.json` pasa solo a `config/users.json` como Administrador la primera vez que arranca esta versión (el archivo viejo no se borra). Habrá que iniciar sesión otra vez una vez.
 
 Qué no cubre: los roles protegen la consola, no los servicios. Al unir o sacar el servidor de una red ZeroTier, la consola reaplica las reglas de firewall de los servicios según las interfaces ZeroTier detectadas, de modo que un Operador influye indirectamente en esas reglas (no puede editarlas). Tampoco hay límite por grupo: un Operador puede crear certificados de TAK en cualquier grupo.
+
+## Apariencia
+
+En **Apariencia** (solo administrador) se personaliza la consola para que los usuarios la reconozcan como propia:
+
+- **Nombre**: sustituye a «TAK-CONSOLE» en la pestaña, el menú y la pantalla de ingreso (1 a 40 caracteres).
+- **Logo** (PNG, JPG, WEBP o SVG, hasta 512 KB): se ve en el menú y en el ingreso. Se puede ocultar el nombre si el logo ya lo incluye.
+- **Icono de la pestaña** (PNG, ICO o SVG, hasta 256 KB). Si no lo ves cambiar, recarga con Ctrl+F5: los navegadores guardan los iconos en caché con insistencia.
+- **Color de acento**: botones, enlaces y foco. Las luces de estado y los avisos conservan su color. Se rechazan colores demasiado oscuros para leerse sobre el fondo, y el texto de los botones se elige solo (oscuro o blanco) según el contraste.
+- **Restablecer todo** vuelve a lo original. Todo se guarda en `data/branding/` y `data/config/settings.json`.
+
+Seguridad de lo que se sube: el tipo se decide por el **contenido** del archivo, no por su nombre; un SVG se rechaza si trae `<script>`, `<foreignObject>`, eventos (`onload`…), referencias externas, `DOCTYPE` o entidades; los archivos se sirven con `nosniff` y `Content-Security-Policy: sandbox`, así que un SVG abierto directamente no ejecuta nada. Como el logo, el icono y el color se ven antes de iniciar sesión, **se sirven sin autenticación**: no subas nada que no quieras que vea quien llegue a la URL.
 
 ## Puertos
 
@@ -196,7 +209,7 @@ Docker publica puertos saltándose UFW. Por eso todos los contenedores usan `net
 
 ## Seguridad
 
-- Toda ruta exige sesión iniciada; no es posible registrar una ruta sin autenticación. Todo POST exige token CSRF. Cada ruta exige además un permiso según el rol (*Usuarios y roles*) y lo no clasificado exige Administrador.
+- Toda ruta exige sesión iniciada, salvo el inicio de sesión y tres rutas de apariencia que solo entregan logo, icono y color (`/branding/…`); no es posible registrar otra ruta sin autenticación. Todo POST exige token CSRF. Cada ruta exige además un permiso según el rol (*Usuarios y roles*) y lo no clasificado exige Administrador.
 - Bloqueo de 5 minutos tras 5 intentos fallidos por IP. Sesión inactiva caduca a los 30 minutos.
 - Cabeceras CSP estrictas (sin scripts ni estilos en línea), `X-Frame-Options: DENY`.
 - Los comandos se ejecutan como listas de argumentos, nunca a través de una shell; los valores que llegan a archivos de configuración, certificados o comandos se validan con listas blancas de caracteres.
@@ -215,7 +228,7 @@ takconsole/
   config.py             rutas y constantes
   cli.py                set-password, list-users, console-cert
   core/                 settings (JSON), jobs (tareas en segundo plano), shell, firewall,
-                        docker, certs, system, validate, auth, users, rbac, audit
+                        docker, certs, system, validate, auth, users, rbac, audit, branding
   modules/              un archivo por servicio: zerotier, takserver, mediamtx, mumble
   templates/            páginas (Jinja2)
   static/               CSS, JS y fuentes Barlow (OFL) servidas localmente

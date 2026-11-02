@@ -3,11 +3,11 @@
 import time
 from datetime import timedelta
 
-from flask import (Flask, abort, g, jsonify, redirect, render_template, request, send_file,
-                   session, url_for)
+from flask import (Flask, Response, abort, g, jsonify, redirect, render_template, request,
+                   send_file, session, url_for)
 
 from . import config
-from .core import audit, auth, certs, firewall, monitor, rbac, settings, system, users
+from .core import audit, auth, branding, certs, firewall, monitor, rbac, settings, system, users
 from .core.jobs import JOBS, Busy
 
 PUBLIC_ENDPOINTS = rbac.PUBLIC_ENDPOINTS
@@ -94,8 +94,10 @@ def create_app():
 
     @app.context_processor
     def _ctx():
+        brand = branding.get()
         return {
-            "app_name": config.APP_NAME,
+            "app_name": brand["name"],
+            "brand": brand,
             "app_version": config.APP_VERSION,
             "modules": MODULES,
             "csrf_token": auth.csrf_token(session),
@@ -266,6 +268,85 @@ def create_app():
             abort(404)
         return send_file(str(config.CONSOLE_CERT), as_attachment=True,
                          download_name="tak-console.crt")
+
+    # ── apariencia ──────────────────────────────────────────────────────────
+    def _asset(kind):
+        found = branding.image(kind)
+        if not found:
+            abort(404)
+        path, mime = found
+        resp = send_file(str(path), mimetype=mime, max_age=86400)
+        # Si alguien abre la URL de un SVG directamente, no debe poder ejecutar nada.
+        resp.headers["Content-Security-Policy"] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+        return resp
+
+    @app.route("/branding/logo")
+    def branding_logo():
+        return _asset("logo")
+
+    @app.route("/branding/favicon")
+    def branding_favicon():
+        return _asset("favicon")
+
+    @app.route("/branding/theme.css")
+    def branding_theme():
+        resp = Response(branding.theme_css(), mimetype="text/css")
+        resp.headers["Cache-Control"] = "public, max-age=86400"
+        return resp
+
+    @app.route("/apariencia")
+    def appearance_page():
+        return render_template("appearance.html", max_kb={k: v // 1024 for k, v in branding.MAX_BYTES.items()},
+                               allowed={k: ", ".join(e.upper() for e in v) for k, v in branding.ALLOWED.items()},
+                               default_accent="#e9a43c", default_name=config.APP_NAME,
+                               name_message=branding.NAME_MESSAGE)
+
+    @app.route("/api/apariencia/texto", methods=["POST"])
+    def appearance_text():
+        name = request.form.get("name", "")
+        accent = request.form.get("accent", "")
+        show_name = request.form.get("show_name", "").lower() in ("1", "true", "on")
+        try:
+            branding.set_text(name, accent, show_name)
+        except ValueError:
+            errors = {}
+            for field, check, value in (("name", branding.check_name, name),
+                                        ("accent", lambda v: branding.check_accent(v) if v.strip() else None, accent)):
+                try:
+                    check(value)
+                except ValueError as e:
+                    errors[field] = str(e)
+            return jsonify(ok=False, errors=errors), 400
+        return jsonify(ok=True)
+
+    @app.route("/api/apariencia/imagen/<kind>", methods=["POST"])
+    def appearance_image(kind):
+        if kind not in branding.ALLOWED:
+            abort(404)
+        limit = branding.MAX_BYTES[kind]
+        if request.content_length and request.content_length > limit + 64 * 1024:
+            return jsonify(ok=False, errors={"file": f"Pesa demasiado (máximo {limit // 1024} KB)"}), 413
+        fs = request.files.get("file")
+        if not fs or not fs.filename:
+            return jsonify(ok=False, errors={"file": "Selecciona un archivo"}), 400
+        data = fs.stream.read(limit + 1)
+        try:
+            branding.set_image(kind, data)
+        except ValueError as e:
+            return jsonify(ok=False, errors={"file": str(e)}), 400
+        return jsonify(ok=True)
+
+    @app.route("/api/apariencia/imagen/<kind>/borrar", methods=["POST"])
+    def appearance_image_clear(kind):
+        if kind not in branding.ALLOWED:
+            abort(404)
+        branding.clear_image(kind)
+        return jsonify(ok=True)
+
+    @app.route("/api/apariencia/restablecer", methods=["POST"])
+    def appearance_reset():
+        branding.reset()
+        return jsonify(ok=True)
 
     # ── rutas propias de cada módulo ────────────────────────────────────────
     for m in MODULES.values():

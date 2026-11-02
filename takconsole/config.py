@@ -15,6 +15,7 @@ LOG_DIR = DATA_DIR / "logs"           # un archivo por tarea ejecutada
 UPLOAD_DIR = DATA_DIR / "uploads"     # paquetes subidos (TAK Server .deb, planet, etc.)
 STACKS_DIR = DATA_DIR / "stacks"      # docker compose + volúmenes por módulo
 CERTS_DIR = DATA_DIR / "certs"        # certificado HTTPS de la consola
+BRANDING_DIR = DATA_DIR / "branding"  # logo e icono personalizados
 
 CONSOLE_PORT = int(os.environ.get("TAKCONSOLE_PORT", "5001"))
 CONSOLE_CERT = CERTS_DIR / "console.crt"
@@ -28,7 +29,7 @@ DRY_RUN = os.environ.get("TAKCONSOLE_DRY_RUN") == "1"
 
 
 def ensure_dirs():
-    for d in (DATA_DIR, CONFIG_DIR, LOG_DIR, UPLOAD_DIR, STACKS_DIR, CERTS_DIR):
+    for d in (DATA_DIR, CONFIG_DIR, LOG_DIR, UPLOAD_DIR, STACKS_DIR, CERTS_DIR, BRANDING_DIR):
         d.mkdir(parents=True, exist_ok=True)
     for d in (DATA_DIR, CONFIG_DIR, CERTS_DIR):
         try:

@@ -20,6 +20,7 @@ def data_dir(tmp_path, monkeypatch):
     monkeypatch.setattr(config, "UPLOAD_DIR", tmp_path / "uploads")
     monkeypatch.setattr(config, "STACKS_DIR", tmp_path / "stacks")
     monkeypatch.setattr(config, "CERTS_DIR", tmp_path / "certs")
+    monkeypatch.setattr(config, "BRANDING_DIR", tmp_path / "branding")
     monkeypatch.setattr(config, "CONSOLE_CERT", tmp_path / "certs" / "console.crt")
     monkeypatch.setattr(config, "CONSOLE_KEY", tmp_path / "certs" / "console.key")
     monkeypatch.setattr(config, "DRY_RUN", True)

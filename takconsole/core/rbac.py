@@ -29,7 +29,9 @@ ROLES = {
 ROLE_ORDER = ("admin", "operator", "viewer")
 
 # Rutas abiertas (login) o sin permiso propio (cualquier sesión válida): ver app.py.
-PUBLIC_ENDPOINTS = {"login", "static", "health"}
+PUBLIC_ENDPOINTS = {"login", "static", "health",
+                    # logo, icono y color: se ven en la pantalla de inicio de sesión
+                    "branding_logo", "branding_favicon", "branding_theme"}
 
 # endpoint de Flask → permiso exigido. Lo no listado exige ADMIN.
 ENDPOINT_PERMS = {
@@ -53,6 +55,8 @@ ENDPOINT_PERMS = {
     "zt_planet_upload": ADMIN, "zt_planet_reset": ADMIN, "zt_planet_download": ADMIN,
     "users_page": ADMIN, "users_create": ADMIN, "users_role": ADMIN, "users_password": ADMIN,
     "users_state": ADMIN, "users_delete": ADMIN,
+    "appearance_page": ADMIN, "appearance_text": ADMIN, "appearance_image": ADMIN,
+    "appearance_image_clear": ADMIN, "appearance_reset": ADMIN,
 }
 
 

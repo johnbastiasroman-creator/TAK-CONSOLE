@@ -19,6 +19,9 @@
   --faint: #6f7c74;
   --amber: #e9a43c;
   --amber-ink: #241a08;
+  /* Color de acento (botones, enlaces, foco). Por defecto igual al ámbar; se cambia en Apariencia. */
+  --accent: #e9a43c;
+  --accent-ink: #241a08;
   --ok: #74c08a;
   --err: #e06a55;
   --off: #56625b;
@@ -36,9 +39,9 @@ body {
   font: 400 15px/1.55 var(--body);
   min-height: 100vh;
 }
-a { color: var(--amber); text-underline-offset: 3px; }
-a:hover { color: #f4bd63; }
-:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+a { color: var(--accent); text-underline-offset: 3px; }
+a:hover { color: color-mix(in srgb, var(--accent) 80%, white); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 h1, h2, h3 { font-family: var(--display); font-weight: 600; line-height: 1.15; margin: 0; letter-spacing: 0.005em; }
 h1 { font-size: 30px; }
 h2 { font-size: 21px; }
@@ -134,8 +137,8 @@ meter::-moz-meter-bar { background: var(--ok); border-radius: 3px; }
   border-radius: var(--r-sm); cursor: pointer; text-decoration: none; white-space: nowrap;
 }
 .btn:hover { border-color: #56635c; color: var(--text); }
-.btn.primary { background: var(--amber); border-color: var(--amber); color: var(--amber-ink); }
-.btn.primary:hover { background: #f2b555; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary:hover { background: color-mix(in srgb, var(--accent) 86%, white); border-color: color-mix(in srgb, var(--accent) 86%, white); }
 .btn.danger { color: #f09a89; border-color: #6a3a31; background: transparent; }
 .btn.danger:hover { background: #3a231e; }
 .btn.small { padding: 7px 11px; font-size: 13.5px; }
@@ -171,9 +174,9 @@ input[type=file]::file-selector-button {
   font: 600 13.5px/1 var(--display); color: var(--text); background: var(--panel-2);
   border: 1px solid var(--line); border-radius: var(--r-sm); padding: 7px 11px; margin-right: 10px; cursor: pointer;
 }
-input:focus, select:focus, textarea:focus { border-color: var(--amber); outline: none; box-shadow: 0 0 0 3px rgba(233,164,60,.18); }
+input:focus, select:focus, textarea:focus { border-color: var(--accent); outline: none; box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 .check { display: flex; gap: 10px; align-items: flex-start; padding: 6px 0; }
-.check input { margin-top: 3px; accent-color: var(--amber); width: 16px; height: 16px; flex: none; }
+.check input { margin-top: 3px; accent-color: var(--accent); width: 16px; height: 16px; flex: none; }
 .check span { font-size: 14.5px; }
 .check small { display: block; color: var(--faint); font-size: 12.5px; }
 .protocols { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 4px 12px; }
@@ -220,7 +223,7 @@ pre.logs { background: #121815; border: 1px solid var(--line); border-radius: va
 .upload.ready { border-style: solid; border-color: #3f6a4c; background: #1f2b24; }
 .progress { margin-top: 12px; display: none; }
 .progress.on { display: block; }
-progress { width: 100%; height: 8px; accent-color: var(--amber); }
+progress { width: 100%; height: 8px; accent-color: var(--accent); }
 
 dialog { background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-md); padding: 22px; max-width: 440px; width: calc(100% - 32px); }
 dialog::backdrop { background: rgba(8, 12, 10, .7); }
@@ -266,8 +269,8 @@ dialog h2 { margin-bottom: 8px; }
 .mon-tabs { display: flex; flex-wrap: wrap; gap: 4px; margin: 16px 0 8px; border-bottom: 1px solid var(--line); }
 .mon-tab { background: transparent; border: 0; border-bottom: 2px solid transparent; margin-bottom: -1px; padding: 9px 12px; color: var(--muted); font: 500 15px/1 var(--display); cursor: pointer; }
 .mon-tab:hover { color: var(--text); }
-.mon-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--amber); }
-.mon-tab:focus-visible, .mon-tools select:focus-visible { outline: 2px solid var(--amber); outline-offset: 2px; }
+.mon-tab[aria-selected="true"] { color: var(--text); border-bottom-color: var(--accent); }
+.mon-tab:focus-visible, .mon-tools select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .monitor [hidden] { display: none !important; }
 .mon-note, .mon-foot { font-size: 13px; margin: 6px 0; }
 .mon-chips { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 8px; }
@@ -303,3 +306,15 @@ tr.manage > td { background: #1f2723; padding: 14px 16px; }
 .manage-grid h3 { margin: 0 0 8px; font-size: 15px; }
 .manage-grid form { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
 .manage-grid .field { width: 100%; }
+
+/* ── Apariencia ─────────────────────────────────────────────────────────── */
+.brand .logo { display: block; max-height: 36px; max-width: 150px; width: auto; height: auto; object-fit: contain; }
+.login .brand .logo { max-height: 64px; max-width: 240px; margin-bottom: 4px; }
+.brandmark, .brand.has-logo { flex-direction: column; align-items: flex-start; gap: 6px; }
+.brand.has-logo span { margin-top: -2px; }
+.brandpreview { display: flex; align-items: center; gap: 14px; padding: 14px; border: 1px solid var(--line-soft);
+  border-radius: var(--r-md); background: var(--bg); min-height: 70px; }
+.brandpreview img { max-height: 48px; max-width: 220px; object-fit: contain; }
+.brandpreview img.fav { width: 32px; height: 32px; }
+.brandpreview .none { color: var(--faint); font-size: 14px; }
+.swatch { display: inline-block; width: 18px; height: 18px; border-radius: 4px; border: 1px solid var(--line); vertical-align: -4px; margin-right: 6px; }

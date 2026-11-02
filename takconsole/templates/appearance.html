@@ -1,0 +1,80 @@
+{% extends "base.html" %}
+{% from "_macros.html" import input, check %}
+{% block title %}Apariencia{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div><h1>Apariencia</h1>
+    <p>Nombre, logo, icono de la pestaña y color de la consola. Los cambios los ven todos los usuarios.</p></div>
+  {% if brand.customized %}
+  <div class="btnrow">
+    <button class="btn" type="button" data-action="/api/apariencia/restablecer"
+            data-confirm="¿Volver al nombre, logo, icono y color originales?">Restablecer todo</button>
+  </div>
+  {% endif %}
+</div>
+
+<div class="module single">
+  <div>
+    <section class="panel">
+      <h2>Nombre y color</h2>
+      <form data-api="/api/apariencia/texto" data-reload data-success="Guardado.">
+        <div class="grid2">
+          {{ input('name', 'Nombre de la consola', brand.name if brand.custom_name else '', placeholder=default_name,
+                   hint='Aparece en la pestaña, en el menú y al iniciar sesión. Vacío = ' ~ default_name ~ '.') }}
+          <div class="field" data-field="accent">
+            <label for="f-accent">Color de acento</label>
+            <input id="f-accent" name="accent" type="color" value="{{ brand.accent or default_accent }}">
+            <span class="hint">Botones, enlaces y foco. Las luces de estado y los avisos no cambian de color.</span>
+            <span class="err" role="alert"></span>
+          </div>
+        </div>
+        {{ check('show_name', 'Mostrar el nombre junto al logo', brand.show_name,
+                 hint='Desmárcalo si tu logo ya incluye el nombre.') }}
+        <div class="formfoot"><button class="btn primary" type="submit">Guardar</button></div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Logo</h2>
+      <p>Se ve en el menú lateral y en la pantalla de inicio de sesión. Formatos: {{ allowed.logo }}; máximo {{ max_kb.logo }} KB.
+         Mejor con fondo transparente o claro, porque la consola es oscura.</p>
+      <div class="brandpreview">
+        {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="Logo actual">{% else %}<span class="none">Sin logo: se muestra el nombre.</span>{% endif %}
+      </div>
+      <form data-api="/api/apariencia/imagen/logo" data-reload data-success="Logo actualizado.">
+        {{ input('file', 'Archivo de logo', type='file', attrs='accept=".png,.jpg,.jpeg,.webp,.svg"') }}
+        <div class="formfoot btnrow">
+          <button class="btn primary" type="submit">Subir logo</button>
+          {% if brand.logo_url %}<button class="btn" type="button" data-action="/api/apariencia/imagen/logo/borrar"
+                  data-confirm="¿Quitar el logo?">Quitar logo</button>{% endif %}
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Icono de la pestaña</h2>
+      <p>El icono pequeño que aparece junto al título en el navegador y en los marcadores. Formatos: {{ allowed.favicon }};
+         máximo {{ max_kb.favicon }} KB. Lo ideal es un PNG cuadrado (por ejemplo 64×64) o un SVG. Si ya lo tenías abierto,
+         el navegador puede tardar en refrescarlo: recarga con Ctrl+F5.</p>
+      <div class="brandpreview">
+        {% if brand.favicon_url %}<img class="fav" src="{{ brand.favicon_url }}" alt="Icono actual">{% else %}<span class="none">Icono por defecto.</span>{% endif %}
+      </div>
+      <form data-api="/api/apariencia/imagen/favicon" data-reload data-success="Icono actualizado.">
+        {{ input('file', 'Archivo de icono', type='file', attrs='accept=".png,.ico,.svg"') }}
+        <div class="formfoot btnrow">
+          <button class="btn primary" type="submit">Subir icono</button>
+          {% if brand.favicon_url %}<button class="btn" type="button" data-action="/api/apariencia/imagen/favicon/borrar"
+                  data-confirm="¿Volver al icono por defecto?">Quitar icono</button>{% endif %}
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Qué debes saber</h2>
+      <p class="muted">El logo, el icono y el color se sirven sin iniciar sesión, porque se ven en la pantalla de ingreso:
+         no subas nada que no quieras que vea quien llegue a la URL de la consola. Los archivos se revisan por su contenido;
+         un SVG con scripts, eventos o referencias externas se rechaza.</p>
+    </section>
+  </div>
+</div>
+{% endblock %}
