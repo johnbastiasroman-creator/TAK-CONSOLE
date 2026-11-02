@@ -36,7 +36,7 @@
 
     <section class="panel">
       <h2>Logo</h2>
-      <p>Se ve pequeño en el menú lateral y en el inicio de sesión, y grande en el encabezado del panel principal. Formatos: {{ allowed.logo }}; máximo {{ max_kb.logo }} KB.
+      <p>Se ve pequeño en el menú lateral y grande en el encabezado del panel principal. La pantalla de inicio de sesión usa este logo salvo que subas uno propio más abajo. Formatos: {{ allowed.logo }}; máximo {{ max_kb.logo }} KB.
          Mejor con fondo transparente o claro, porque la consola es oscura.</p>
       <div class="brandpreview">
         {% if brand.logo_url %}<img src="{{ brand.logo_url }}" alt="Logo actual">{% else %}<span class="none">Sin logo: se muestra el nombre.</span>{% endif %}
@@ -47,6 +47,26 @@
           <button class="btn primary" type="submit">Subir logo</button>
           {% if brand.logo_url %}<button class="btn" type="button" data-action="/api/apariencia/imagen/logo/borrar"
                   data-confirm="¿Quitar el logo?">Quitar logo</button>{% endif %}
+        </div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Logo de la pantalla de ingreso</h2>
+      <p>Opcional. Si subes uno, la pantalla de inicio de sesión usa este logo (se muestra centrado y más grande) y el menú y el panel
+         siguen con el logo del sitio. {% if not brand.has_login_logo %}Mientras no subas uno, el ingreso usa el logo del sitio.{% endif %}
+         Formatos: {{ allowed.login }}; máximo {{ max_kb.login }} KB.</p>
+      <div class="brandpreview">
+        {% if brand.has_login_logo %}<img src="{{ brand.login_logo_url }}" alt="Logo de ingreso actual">
+        {% elif brand.login_logo_url %}<img src="{{ brand.login_logo_url }}" alt="Logo del sitio"><span class="none">Usa el logo del sitio.</span>
+        {% else %}<span class="none">Sin logo: se muestra el nombre.</span>{% endif %}
+      </div>
+      <form data-api="/api/apariencia/imagen/login" data-reload data-success="Logo de ingreso actualizado.">
+        {{ input('file', 'Archivo del logo de ingreso', type='file', attrs='accept=".png,.jpg,.jpeg,.webp,.svg"') }}
+        <div class="formfoot btnrow">
+          <button class="btn primary" type="submit">Subir logo de ingreso</button>
+          {% if brand.has_login_logo %}<button class="btn" type="button" data-action="/api/apariencia/imagen/login/borrar"
+                  data-confirm="¿Quitar el logo de ingreso? Se usará el logo del sitio.">Quitar logo de ingreso</button>{% endif %}
         </div>
       </form>
     </section>

@@ -177,6 +177,7 @@ En **Apariencia** (solo administrador) se personaliza la consola para que los us
 
 - **Nombre**: sustituye a «TAK-CONSOLE» en la pestaña, el menú y la pantalla de ingreso (1 a 40 caracteres).
 - **Logo** (PNG, JPG, WEBP o SVG, hasta 512 KB): se ve pequeño en el menú y el ingreso, y **grande en el encabezado del panel principal**, junto al nombre del servidor. Se puede ocultar el nombre si el logo ya lo incluye.
+- **Logo de la pantalla de ingreso** (opcional, mismos formatos y tamaño): se muestra centrado y grande en el inicio de sesión. Si no subes uno, el ingreso usa el logo del sitio; si subes uno, el menú y el panel siguen con el logo del sitio.
 - **Icono de la pestaña** (PNG, ICO o SVG, hasta 256 KB). Si no lo ves cambiar, recarga con Ctrl+F5: los navegadores guardan los iconos en caché con insistencia.
 - **Color de acento**: botones, enlaces y foco. Las luces de estado y los avisos conservan su color. Se rechazan colores demasiado oscuros para leerse sobre el fondo, y el texto de los botones se elige solo (oscuro o blanco) según el contraste.
 - **Restablecer todo** vuelve a lo original. Todo se guarda en `data/branding/` y `data/config/settings.json`.
@@ -209,7 +210,7 @@ Docker publica puertos saltándose UFW. Por eso todos los contenedores usan `net
 
 ## Seguridad
 
-- Toda ruta exige sesión iniciada, salvo el inicio de sesión y tres rutas de apariencia que solo entregan logo, icono y color (`/branding/…`); no es posible registrar otra ruta sin autenticación. Todo POST exige token CSRF. Cada ruta exige además un permiso según el rol (*Usuarios y roles*) y lo no clasificado exige Administrador.
+- Toda ruta exige sesión iniciada, salvo el inicio de sesión y cuatro rutas de apariencia que solo entregan logo, logo de ingreso, icono y color (`/branding/…`); no es posible registrar otra ruta sin autenticación. Todo POST exige token CSRF. Cada ruta exige además un permiso según el rol (*Usuarios y roles*) y lo no clasificado exige Administrador.
 - Bloqueo de 5 minutos tras 5 intentos fallidos por IP. Sesión inactiva caduca a los 30 minutos.
 - Cabeceras CSP estrictas (sin scripts ni estilos en línea), `X-Frame-Options: DENY`.
 - Los comandos se ejecutan como listas de argumentos, nunca a través de una shell; los valores que llegan a archivos de configuración, certificados o comandos se validan con listas blancas de caracteres.
