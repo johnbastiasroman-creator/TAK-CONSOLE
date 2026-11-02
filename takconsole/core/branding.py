@@ -13,6 +13,7 @@ Los archivos se sirven desde rutas públicas (el logo y el icono se ven en la pa
 sesión) con cabeceras que impiden que un SVG ejecute nada si alguien abre su URL directamente.
 """
 import re
+import secrets
 import threading
 import xml.etree.ElementTree as ET
 
@@ -26,6 +27,17 @@ ALLOWED = {"logo": ("png", "jpg", "webp", "svg"), "login": ("png", "jpg", "webp"
 MIME = {"png": "image/png", "jpg": "image/jpeg", "webp": "image/webp",
         "ico": "image/x-icon", "svg": "image/svg+xml"}
 LABEL = {"logo": "logo", "login": "logo de ingreso", "favicon": "icono"}
+PHRASE = {"logo": "el logo", "login": "el logo de ingreso", "favicon": "el icono",
+          "footer": "las imágenes del pie de página"}
+
+# Pie de página: una línea de texto y una fila de FOOTER_SLOTS recuadros con una imagen cada uno.
+# El recuadro central (el 4) queda en el centro de la página; los vacíos conservan su sitio.
+FOOTER_SLOTS = 7
+FOOTER_MAX_BYTES = 256 * 1024
+FOOTER_FORMATS = ("png", "jpg", "webp", "svg")
+FOOTER_TEXT_PATTERN = r"[^\x00-\x1f\x7f<>]{1,200}"
+FOOTER_TEXT_MESSAGE = "Hasta 200 caracteres, en una sola línea y sin los signos < ni >"
+_FOOTER_FILE = re.compile(r"footer-[0-9a-f]{12}\.(png|jpg|webp|svg)")
 
 NAME_PATTERN = r"[\w .,_+&()/-]{1,40}"
 NAME_MESSAGE = "1 a 40 caracteres: letras, números, espacios y . , _ - + & ( ) /"
@@ -115,9 +127,10 @@ def detect(data: bytes, kind: str) -> str:
         ext = "svg"
     else:
         raise ValueError("Formato no reconocido")
-    if ext not in ALLOWED[kind]:
-        raise ValueError("Formato no permitido para el " + LABEL[kind] + ": usa "
-                         + ", ".join(e.upper() for e in ALLOWED[kind]))
+    allowed = FOOTER_FORMATS if kind == "footer" else ALLOWED[kind]
+    if ext not in allowed:
+        raise ValueError("Formato no permitido para " + PHRASE[kind] + ": usa "
+                         + ", ".join(e.upper() for e in allowed))
     if ext == "svg":
         check_svg(data)
     return ext
@@ -136,11 +149,27 @@ def _image_path(kind, state):
     return path if path.is_file() else None
 
 
+def _footer_slots(st):
+    """Siempre FOOTER_SLOTS entradas: {"file", "mime"} o None. Descarta lo que no sea un archivo
+    del pie existente (también protege de un settings.json editado a mano)."""
+    raw = st.get("footer") or []
+    out = []
+    for i in range(FOOTER_SLOTS):
+        meta = raw[i] if i < len(raw) else None
+        ok = (isinstance(meta, dict) and _FOOTER_FILE.fullmatch(str(meta.get("file", "")))
+              and (config.BRANDING_DIR / meta["file"]).is_file())
+        out.append({"file": meta["file"], "mime": meta.get("mime", "")} if ok else None)
+    return out
+
+
 def get() -> dict:
     """Datos de apariencia listos para las plantillas."""
     st = _state()
     rev = int(st.get("rev", 0))
     q = f"?v={rev}"
+    slots = _footer_slots(st)
+    foot_text = st.get("footer_text") or ""
+    has_foot_images = any(slots)
     accent = st.get("accent") or None
     return {
         "name": st.get("name") or config.APP_NAME,
@@ -156,8 +185,13 @@ def get() -> dict:
         "favicon_url": "/branding/favicon" + q if _image_path("favicon", st) else None,
         "favicon_mime": (st.get("favicon") or {}).get("mime"),
         "theme_url": "/branding/theme.css" + q,
+        "footer_text": foot_text,
+        "footer_slots": [{"n": i + 1, "url": f"/branding/footer/{i + 1}{q}" if sl else None}
+                         for i, sl in enumerate(slots)],
+        "footer_has_images": has_foot_images,
+        "show_footer": bool(foot_text or has_foot_images),
         "customized": bool(st.get("name") or accent or st.get("logo") or st.get("login") or st.get("favicon")
-                           or st.get("show_name") is False),
+                           or st.get("show_name") is False or foot_text or has_foot_images),
     }
 
 
@@ -166,6 +200,14 @@ def image(kind):
     st = _state()
     path = _image_path(kind, st)
     return (path, st[kind]["mime"]) if path else None
+
+
+def footer_image(slot):
+    """(ruta, mime) de la imagen del recuadro `slot` (1 a FOOTER_SLOTS), o None."""
+    if not 1 <= slot <= FOOTER_SLOTS:
+        return None
+    meta = _footer_slots(_state())[slot - 1]
+    return (config.BRANDING_DIR / meta["file"], meta["mime"]) if meta else None
 
 
 def theme_css() -> str:
@@ -231,9 +273,88 @@ def clear_image(kind):
         _bump({kind: None})
 
 
+# ── pie de página ───────────────────────────────────────────────────────────
+def check_footer_text(text):
+    text = (text or "").strip()
+    if text and not re.fullmatch(FOOTER_TEXT_PATTERN, text):
+        raise ValueError(FOOTER_TEXT_MESSAGE)
+    return text
+
+
+def set_footer_text(text):
+    text = check_footer_text(text)
+    with _LOCK:
+        _bump({"footer_text": text or None})
+
+
+def _check_slot(slot):
+    if not isinstance(slot, int) or not 1 <= slot <= FOOTER_SLOTS:
+        raise ValueError(f"El recuadro debe estar entre 1 y {FOOTER_SLOTS}")
+
+
+def _unlink(name):
+    try:
+        (config.BRANDING_DIR / name).unlink()
+    except OSError:
+        pass
+
+
+def set_footer_image(slot, data: bytes):
+    _check_slot(slot)
+    if not data:
+        raise ValueError("El archivo está vacío")
+    if len(data) > FOOTER_MAX_BYTES:
+        raise ValueError(f"La imagen pesa demasiado (máximo {FOOTER_MAX_BYTES // 1024} KB)")
+    ext = detect(data, "footer")
+    with _LOCK:
+        config.BRANDING_DIR.mkdir(parents=True, exist_ok=True)
+        slots = _footer_slots(_state())
+        old = slots[slot - 1]
+        dest = config.BRANDING_DIR / f"footer-{secrets.token_hex(6)}.{ext}"
+        dest.write_bytes(data)
+        dest.chmod(0o600)
+        slots[slot - 1] = {"file": dest.name, "mime": MIME[ext]}
+        _bump({"footer": slots})
+        if old:                          # solo después de guardar: un fallo no deja el recuadro sin imagen
+            _unlink(old["file"])
+
+
+def clear_footer_image(slot):
+    _check_slot(slot)
+    with _LOCK:
+        slots = _footer_slots(_state())
+        old = slots[slot - 1]
+        slots[slot - 1] = None
+        _bump({"footer": slots})
+        if old:
+            _unlink(old["file"])
+
+
+def parse_order(order) -> list:
+    """«2,1,3,4,5,6,7» → [2, 1, 3, …]. Debe ser una permutación de 1..FOOTER_SLOTS."""
+    parts = order if isinstance(order, (list, tuple)) else str(order or "").split(",")
+    try:
+        nums = [int(str(p).strip()) for p in parts]
+    except ValueError:
+        raise ValueError("Orden inválido")
+    if sorted(nums) != list(range(1, FOOTER_SLOTS + 1)):
+        raise ValueError("Orden inválido")
+    return nums
+
+
+def reorder_footer(order):
+    """El recuadro i pasa a mostrar lo que había en el recuadro order[i-1]."""
+    nums = parse_order(order)
+    with _LOCK:
+        slots = _footer_slots(_state())
+        _bump({"footer": [slots[n - 1] for n in nums]})
+
+
 def reset():
     with _LOCK:
         for kind in ALLOWED:
             _remove_files(kind)
+        for old in config.BRANDING_DIR.glob("footer-*.*"):
+            _unlink(old.name)
         _bump({"name": None, "accent": None, "logo": None, "login": None, "favicon": None,
-               "show_name": None})
+               "show_name": None, "footer": None, "footer_text": None})

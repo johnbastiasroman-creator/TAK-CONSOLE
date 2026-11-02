@@ -90,9 +90,46 @@
     </section>
 
     <section class="panel">
+      <h2>Pie de página</h2>
+      <p>Una línea de texto y hasta {{ brand.footer_slots | length }} imágenes (escudos, logos de instituciones…) que se muestran al final de todas las páginas, también en el inicio de sesión.
+         Las imágenes van en una fila de {{ brand.footer_slots | length }} recuadros y el <b>4 es el central</b>. Arrastra una imagen a otro recuadro para cambiarla de lugar
+         (o usa las flechas <b>‹ ›</b>). Los recuadros y números solo se ven aquí: a los demás usuarios solo les aparecen las imágenes.
+         Formatos: {{ allowed.footer }}; máximo {{ max_kb.footer }} KB cada una.</p>
+      <form data-api="/api/apariencia/pie/texto" data-reload data-success="Texto guardado.">
+        {{ input('footer_text', 'Texto del pie de página', brand.footer_text, placeholder='Ej.: Todos los derechos reservados — Mi organización',
+                 hint='Una sola línea, hasta 200 caracteres. Vacío = sin texto.') }}
+        <div class="formfoot"><button class="btn primary" type="submit">Guardar texto</button></div>
+      </form>
+      <h3 class="mt">Imágenes</h3>
+      <div class="footeditor" data-footer-editor data-order-url="/api/apariencia/pie/orden">
+        {% for s in brand.footer_slots %}
+        <div class="fslot{% if s.n == 4 %} center{% endif %}" data-slot="{{ s.n }}">
+          <div class="fslot-box">
+            <span class="fslot-n">{{ s.n }}{% if s.n == 4 %} · centro{% endif %}</span>
+            {% if s.url %}<img src="{{ s.url }}" alt="Imagen del recuadro {{ s.n }}" draggable="true">{% else %}<span class="none">vacío</span>{% endif %}
+          </div>
+          <form data-api="/api/apariencia/pie/imagen/{{ s.n }}" data-reload>
+            <div class="field" data-field="file">
+              <label class="btn small fslot-up">{{ 'Cambiar' if s.url else 'Subir' }}
+                <input class="visually-hidden" type="file" name="file" accept=".png,.jpg,.jpeg,.webp,.svg" data-autosubmit aria-label="Imagen del recuadro {{ s.n }}"></label>
+              <span class="err" role="alert"></span>
+            </div>
+          </form>
+          <div class="fslot-tools">
+            <button class="btn small" type="button" data-move="-1" aria-label="Mover a la izquierda" {% if loop.first %}disabled{% endif %}>‹</button>
+            {% if s.url %}<button class="btn small" type="button" data-action="/api/apariencia/pie/imagen/{{ s.n }}/borrar"
+                    data-confirm="¿Quitar la imagen del recuadro {{ s.n }}?">Quitar</button>{% endif %}
+            <button class="btn small" type="button" data-move="1" aria-label="Mover a la derecha" {% if loop.last %}disabled{% endif %}>›</button>
+          </div>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="panel">
       <h2>Qué debes saber</h2>
       <p class="muted">El logo, el icono y el color se sirven sin iniciar sesión, porque se ven en la pantalla de ingreso:
-         no subas nada que no quieras que vea quien llegue a la URL de la consola. Los archivos se revisan por su contenido;
+         no subas nada que no quieras que vea quien llegue a la URL de la consola. Lo mismo vale para las imágenes y el texto del pie de página. Los archivos se revisan por su contenido;
          un SVG con scripts, eventos o referencias externas se rechaza.</p>
     </section>
   </div>

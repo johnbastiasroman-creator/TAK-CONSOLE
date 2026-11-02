@@ -271,7 +271,9 @@ def create_app():
 
     # ── apariencia ──────────────────────────────────────────────────────────
     def _asset(kind):
-        found = branding.image(kind)
+        return _serve(branding.image(kind))
+
+    def _serve(found):
         if not found:
             abort(404)
         path, mime = found
@@ -288,6 +290,10 @@ def create_app():
     def branding_login():
         return _asset("login")
 
+    @app.route("/branding/footer/<int:slot>")
+    def branding_footer(slot):
+        return _serve(branding.footer_image(slot))
+
     @app.route("/branding/favicon")
     def branding_favicon():
         return _asset("favicon")
@@ -300,8 +306,12 @@ def create_app():
 
     @app.route("/apariencia")
     def appearance_page():
-        return render_template("appearance.html", max_kb={k: v // 1024 for k, v in branding.MAX_BYTES.items()},
-                               allowed={k: ", ".join(e.upper() for e in v) for k, v in branding.ALLOWED.items()},
+        max_kb = {k: v // 1024 for k, v in branding.MAX_BYTES.items()}
+        max_kb["footer"] = branding.FOOTER_MAX_BYTES // 1024
+        allowed = {k: ", ".join(e.upper() for e in v) for k, v in branding.ALLOWED.items()}
+        allowed["footer"] = ", ".join(e.upper() for e in branding.FOOTER_FORMATS)
+        return render_template("appearance.html", max_kb=max_kb, allowed=allowed,
+                               footer_message=branding.FOOTER_TEXT_MESSAGE,
                                default_accent="#e9a43c", default_name=config.APP_NAME,
                                name_message=branding.NAME_MESSAGE)
 
@@ -345,6 +355,45 @@ def create_app():
         if kind not in branding.ALLOWED:
             abort(404)
         branding.clear_image(kind)
+        return jsonify(ok=True)
+
+    @app.route("/api/apariencia/pie/texto", methods=["POST"])
+    def appearance_footer_text():
+        try:
+            branding.set_footer_text(request.form.get("footer_text", ""))
+        except ValueError as e:
+            return jsonify(ok=False, errors={"footer_text": str(e)}), 400
+        return jsonify(ok=True)
+
+    @app.route("/api/apariencia/pie/imagen/<int:slot>", methods=["POST"])
+    def appearance_footer_image(slot):
+        if not 1 <= slot <= branding.FOOTER_SLOTS:
+            abort(404)
+        limit = branding.FOOTER_MAX_BYTES
+        if request.content_length and request.content_length > limit + 64 * 1024:
+            return jsonify(ok=False, errors={"file": f"Pesa demasiado (máximo {limit // 1024} KB)"}), 413
+        fs = request.files.get("file")
+        if not fs or not fs.filename:
+            return jsonify(ok=False, errors={"file": "Selecciona un archivo"}), 400
+        try:
+            branding.set_footer_image(slot, fs.stream.read(limit + 1))
+        except ValueError as e:
+            return jsonify(ok=False, errors={"file": str(e)}), 400
+        return jsonify(ok=True)
+
+    @app.route("/api/apariencia/pie/imagen/<int:slot>/borrar", methods=["POST"])
+    def appearance_footer_clear(slot):
+        if not 1 <= slot <= branding.FOOTER_SLOTS:
+            abort(404)
+        branding.clear_footer_image(slot)
+        return jsonify(ok=True)
+
+    @app.route("/api/apariencia/pie/orden", methods=["POST"])
+    def appearance_footer_order():
+        try:
+            branding.reorder_footer(request.form.get("order", ""))
+        except ValueError as e:
+            return jsonify(ok=False, error=str(e)), 400
         return jsonify(ok=True)
 
     @app.route("/api/apariencia/restablecer", methods=["POST"])

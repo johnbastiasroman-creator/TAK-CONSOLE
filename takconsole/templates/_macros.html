@@ -39,6 +39,21 @@
 </section>
 {%- endmacro %}
 
+{# Pie de página: una fila de 7 recuadros (el 4 queda al centro; los vacíos conservan su sitio,
+   sin bordes) y una línea de texto. No se dibuja nada si no hay texto ni imágenes. #}
+{% macro site_footer(brand) -%}
+{% if brand.show_footer %}
+<footer class="sitefoot">
+  {% if brand.footer_has_images %}
+  <div class="footgrid">
+    {% for s in brand.footer_slots %}<div class="footcell">{% if s.url %}<img src="{{ s.url }}" alt="">{% endif %}</div>{% endfor %}
+  </div>
+  {% endif %}
+  {% if brand.footer_text %}<p class="foottext">{{ brand.footer_text }}</p>{% endif %}
+</footer>
+{% endif %}
+{%- endmacro %}
+
 {% macro control_buttons(m, actions, status) -%}
 {% if status.installed and can('service_control') %}
 <div class="btnrow">

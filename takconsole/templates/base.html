@@ -1,4 +1,4 @@
-{% from "_macros.html" import led %}<!doctype html>
+{% from "_macros.html" import led, site_footer %}<!doctype html>
 <html lang="es">
 <head>
   <meta charset="utf-8">
@@ -47,6 +47,7 @@
     {% block content %}{% endblock %}
   </main>
 </div>
+{{ site_footer(brand) }}
 <script src="{{ url_for('static', filename='app.js') }}?v={{ app_version }}"></script>
 </body>
 </html>
