@@ -51,6 +51,9 @@ body.welcome-page .welcome .tab-container .tab-buttons { background: #0f0f0f; co
 body.welcome-page .welcome .tab-container .tab-buttons [role="tab"] { background: #0f0f0f; color: #bdbdbd; }
 body.welcome-page .welcome .tab-container .tab-buttons [role="tab"][aria-selected="true"] { background: #2a2a2a; color: #fff; }
 
+/* Logotipo de Jitsi de la cabecera: fuera (el contenedor es absoluto, no mueve nada) */
+body.welcome-page .welcome .header-watermark-container { display: none; }
+
 /* Pie de página: sin textos ni imágenes, solo la franja negra */
 body.welcome-page .welcome .welcome-footer { background: #000; border-top: 1px solid #2c2c2c; margin-top: 40px; min-height: 72px; }
 body.welcome-page .welcome .welcome-footer > * { display: none; }
