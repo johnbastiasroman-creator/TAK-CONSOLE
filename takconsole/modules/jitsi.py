@@ -11,6 +11,10 @@ y el audio/video (UDP 10000) solo en las direcciones IP del servidor que el admi
 elige. Lo demás (API REST del videopuente) va solo a 127.0.0.1 y el XMPP no se publica.
 
 Sin autenticación: quien llegue a la URL puede crear salas (decisión del administrador).
+
+Diseño: la página de bienvenida puede pasarse a un tema monocromático con nombre y subtítulo
+propios. Se hace con los dos archivos de personalización que la imagen web de Jitsi anexa a su
+configuración (custom-interface_config.js y custom-config.js), sin tocar las imágenes.
 """
 import copy
 import ipaddress
@@ -41,6 +45,13 @@ COLIBRI_PORT = 18080                # REST del videopuente, solo 127.0.0.1 (el 8
 DEFAULT_HTTPS_PORT = 443
 UID = 1000                          # los contenedores corren como uid/gid 1000
 UPSTREAM = Path(__file__).with_name("jitsi_compose.upstream.yml")
+THEME_CSS = Path(__file__).with_name("jitsi_theme.css")
+DEFAULT_APP_NAME = "Tactical VCO"
+DEFAULT_SUBTITLE = "Sistema de Video Conferencia Tactica"
+# Letras (con tildes), números, espacio y signos simples: va dentro de CSS y JavaScript.
+THEME_TEXT = r"[A-Za-z\u00c0-\u00ff0-9 .,:()\-]{1,60}"
+THEME_TEXT_MESSAGE = "Hasta 60 caracteres: letras, números, espacio y . , : ( ) -"
+THEME_FILES = ("web/custom-interface_config.js", "web/custom-config.js")
 
 # Directorios que exige el compose (handbook de Jitsi, «stable-11146 y posteriores») más los
 # custom-ca que monta de solo lectura.
@@ -112,6 +123,31 @@ def env_values(p, secrets_=None):
         env["JVB_DISABLE_STUN"] = "true"
     env.update(secrets_ or {n: secrets.token_hex(16) for n in SECRET_NAMES})
     return env
+
+
+def _css_string(text):
+    """Texto para un `content: "..."` de CSS: lo que no es ASCII simple va como escape hexadecimal."""
+    return "".join(c if 32 <= ord(c) < 127 and c not in '"\\' else f"\\{ord(c):X} " for c in text)
+
+
+def theme_files(p):
+    """{ruta relativa a CONFIG: contenido} de los dos archivos que la imagen web anexa a sus
+    interface_config.js y config.js. Solo ASCII (los acentos van escapados)."""
+    css = THEME_CSS.read_text(encoding="utf-8")
+    css = css.replace("__TITLE__", _css_string(p["app_name"])).replace(
+        "__SUBTITLE__", _css_string(p["subtitle"]))
+    interface = ("// Generado por TAK-CONSOLE\n"
+                 f"interfaceConfig.APP_NAME = {json.dumps(p['app_name'])};\n")
+    custom = ("// Generado por TAK-CONSOLE: aplica el tema monocromatico a la pagina de bienvenida.\n"
+              "(function () {\n"
+              "  try {\n"
+              "    var s = document.createElement('style');\n"
+              "    s.id = 'tak-console-theme';\n"
+              f"    s.textContent = {json.dumps(css)};\n"
+              "    document.head.appendChild(s);\n"
+              "  } catch (e) { /* sin tema: la pagina sigue funcionando */ }\n"
+              "})();\n")
+    return {"web/custom-interface_config.js": interface, "web/custom-config.js": custom}
 
 
 def system_tz():
@@ -193,7 +229,8 @@ class Jitsi(Module):
         return {"st": st, "p": p, "ips": ips, "tak_ca": certs.tak_ca_available(),
                 "release": RELEASE, "https_port": p.get("https_port", DEFAULT_HTTPS_PORT),
                 "jvb_port": JVB_PORT, "default_host": (ips[0] if ips else ""),
-                "default_tz": system_tz()}
+                "default_tz": system_tz(), "default_app_name": DEFAULT_APP_NAME,
+                "default_subtitle": DEFAULT_SUBTITLE}
 
     # ── despliegue ──────────────────────────────────────────────────────────
     def validate_deploy(self, data):
@@ -223,8 +260,15 @@ class Jitsi(Module):
         tz = f.raw("tz") or prev.get("tz") or system_tz()
         if not TZ_NAME.fullmatch(tz):
             f.error("tz", "Zona horaria inválida (por ejemplo America/Santiago)")
+        theme = f.boolean("theme")
+        app_name = f.text("app_name", THEME_TEXT, THEME_TEXT_MESSAGE,
+                          default=prev.get("app_name") or DEFAULT_APP_NAME, required=theme)
+        subtitle = f.text("subtitle", THEME_TEXT, THEME_TEXT_MESSAGE,
+                          default=prev.get("subtitle") or DEFAULT_SUBTITLE, required=theme)
         p = {"host": host, "https_port": port, "bind_ips": chosen, "tz": tz,
-             "tls": f.boolean("tls"), "stun": f.boolean("stun")}
+             "tls": f.boolean("tls"), "stun": f.boolean("stun"),
+             "theme": theme, "app_name": app_name or DEFAULT_APP_NAME,
+             "subtitle": subtitle or DEFAULT_SUBTITLE}
         if p["tls"] and not certs.tak_ca_available():
             f.error("tls", "Necesita la CA de TAK Server: despliega TAK Server primero")
         return p, f.errors
@@ -271,6 +315,7 @@ class Jitsi(Module):
 
         job.step(4, total, "Configuración")
         prev = self._saved_secrets()
+        self._write_theme(p, job)
         docker.write_env(d / ".env", env_values(p, prev))
         docker.write_compose(d, compose_data(p))
         run(["chown", "-R", f"{UID}:{UID}", str(cfg)], log=job.log)
@@ -288,6 +333,18 @@ class Jitsi(Module):
         job.warn("Docker publica estos puertos saltándose UFW: la política de «Red y firewall» no "
                  f"se aplica a Jitsi. Solo escuchan en {', '.join(p['bind_ips'])}.")
         job.ok(f"Abre {public_url(p['host'], p['https_port'])} desde un navegador de la red")
+
+    def _write_theme(self, p, job):
+        """Escribe (o quita) los archivos de personalización que anexa la imagen web."""
+        cfg = config_dir()
+        if p.get("theme"):
+            for rel, text in theme_files(p).items():
+                docker.write_private(cfg / rel, text, mode=0o644)
+            job.ok(f"Diseño «{p['app_name']}» aplicado a la página de bienvenida")
+        else:
+            for rel in THEME_FILES:
+                (cfg / rel).unlink(missing_ok=True)
+            job.log("Sin diseño propio: Jitsi mostrará su página de bienvenida original")
 
     def _saved_secrets(self):
         """Conserva las contraseñas internas entre despliegues (si no, prosody las rechazaría)."""
