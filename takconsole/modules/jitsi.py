@@ -185,7 +185,7 @@ def stats(timeout=3):
 
 class Jitsi(Module):
     key = "jitsi"
-    name = "Jitsi Meet"
+    name = "Tactical VCO"
     summary = "Videollamadas en el navegador, con salas por enlace"
     order = 50
     template = "modules/jitsi.html"
@@ -241,7 +241,7 @@ class Jitsi(Module):
         ips = local_ipv4()
         host = f.raw("host") or (prev.get("host") or (ips[0] if ips else ""))
         if not host:
-            f.error("host", "Indica la dirección con la que se abrirá Jitsi")
+            f.error("host", "Indica la dirección con la que se abrirá Tactical VCO")
         elif not valid_host(host):
             f.error("host", "Usa una dirección IPv4 o un nombre (letras, números, punto y guion)")
         port = f.integer("https_port", 1, 65535, prev.get("https_port", DEFAULT_HTTPS_PORT))
@@ -311,7 +311,7 @@ class Jitsi(Module):
             for base in (keys, kept):
                 for name in ("cert.crt", "cert.key"):
                     (base / name).unlink(missing_ok=True)
-            job.log("Jitsi generará un certificado autofirmado: el navegador pedirá aceptarlo y "
+            job.log("Tactical VCO generará un certificado autofirmado: el navegador pedirá aceptarlo y "
                     "las apps móviles de Jitsi no se conectarán con él")
 
         job.step(4, total, "Configuración")
@@ -326,13 +326,13 @@ class Jitsi(Module):
         job.step(5, total, "Contenedores")
         docker.compose(d, "pull", log=job.log)
         docker.compose(d, "up", "-d", "--force-recreate", log=job.log)
-        job.ok("Jitsi Meet iniciado")
+        job.ok("Tactical VCO iniciado")
 
         job.step(6, total, "Firewall")
         self.save_state(installed=True, params=p)
         self.remove_firewall(log=job.log)
         job.warn("Docker publica estos puertos saltándose UFW: la política de «Red y firewall» no "
-                 f"se aplica a Jitsi. Solo escuchan en {', '.join(p['bind_ips'])}.")
+                 f"se aplica a Tactical VCO. Solo escuchan en {', '.join(p['bind_ips'])}.")
         job.ok(f"Abre {public_url(p['host'], p['https_port'])} desde un navegador de la red")
 
     def _write_theme(self, p, job):
@@ -376,11 +376,11 @@ class Jitsi(Module):
             docker.compose(stack_dir(), "down", log=job.log, check=False)
         self.remove_firewall(log=job.log)
         self.save_state(installed=False)
-        job.warn(f"La configuración y el certificado de Jitsi se conservan en {config_dir()}")
+        job.warn(f"La configuración y el certificado de Tactical VCO se conservan en {config_dir()}")
 
     # ── consolas de estado y actividad ──────────────────────────────────────
     EVENT_RULES = []
-    EVENTS_NOTE = ("La consola aún no reconoce eventos de Jitsi: usa «Registro en vivo» y elige el "
+    EVENTS_NOTE = ("La consola aún no reconoce eventos de Tactical VCO: usa «Registro en vivo» y elige el "
                    "componente (Jicofo registra las conferencias, el videopuente el audio y video).")
 
     def log_sources(self):
@@ -433,5 +433,5 @@ class Jitsi(Module):
                 ["Participantes", s.get("endpoints", s.get("participants", "—"))]]
         return monitor.table(
             ["Dato", "Valor"], rows,
-            note="Cifras que informa el videopuente (se actualizan cada pocos segundos). Jitsi no "
+            note="Cifras que informa el videopuente (se actualizan cada pocos segundos). El servidor no "
                  "entrega aquí los nombres de los participantes.")

@@ -307,7 +307,7 @@
       const r = await fetch("/api/m/mediamtx/paths", { credentials: "same-origin" });
       const data = await r.json();
       paths.textContent = "";
-      if (!data.ok) { paths.innerHTML = '<tr><td colspan="4" class="muted">La API de MediaMTX no responde.</td></tr>'; return; }
+      if (!data.ok) { paths.innerHTML = '<tr><td colspan="4" class="muted">La API de Streaming Server no responde.</td></tr>'; return; }
       if (!data.items.length) { paths.innerHTML = '<tr><td colspan="4" class="muted">No hay transmisiones en este momento.</td></tr>'; return; }
       data.items.forEach((it) => {
         const tr = document.createElement("tr");
