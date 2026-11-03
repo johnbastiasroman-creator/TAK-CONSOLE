@@ -47,7 +47,7 @@ UID = 1000                          # los contenedores corren como uid/gid 1000
 UPSTREAM = Path(__file__).with_name("jitsi_compose.upstream.yml")
 THEME_CSS = Path(__file__).with_name("jitsi_theme.css")
 DEFAULT_APP_NAME = "Tactical VCO"
-DEFAULT_SUBTITLE = "Sistema de Video Conferencia Tactica"
+DEFAULT_SUBTITLE = "Sistema de Video Conferencia Táctica"
 # Letras (con tildes), números, espacio y signos simples: va dentro de CSS y JavaScript.
 THEME_TEXT = r"[A-Za-z\u00c0-\u00ff0-9 .,:()\-]{1,60}"
 THEME_TEXT_MESSAGE = "Hasta 60 caracteres: letras, números, espacio y . , : ( ) -"
@@ -401,7 +401,27 @@ class Jitsi(Module):
         port = int(p.get("https_port", DEFAULT_HTTPS_PORT))
         out.append({"label": "Web", "ok": (port, "tcp") in system.listening_ports(),
                     "detail": f"{port}/tcp"})
+        if p.get("theme", None) is None:
+            # Instalación anterior al diseño: los archivos solo se escriben al aplicar.
+            out.append({"label": "Diseño de la página", "ok": False,
+                        "detail": "aún no aplicado: pulsa «Aplicar configuración»"})
+        elif p["theme"]:
+            out.append(self._theme_check())
         return out
+
+    def _theme_check(self):
+        """¿Llegó el diseño al contenedor web? Compara lo escrito en disco con lo que sirve nginx."""
+        label = "Diseño de la página"
+        on_disk = (config_dir() / THEME_FILES[1]).is_file()
+        if not on_disk:
+            return {"label": label, "ok": False,
+                    "detail": "falta custom-config.js: pulsa «Aplicar configuración»"}
+        res = docker.exec_(container("web"), "grep", "-c", "tak-console-theme",
+                           "/run/web/config/config.js")
+        if res.ok and res.output.strip() not in ("", "0"):
+            return {"label": label, "ok": True, "detail": "aplicado en el contenedor web"}
+        return {"label": label, "ok": False,
+                "detail": "escrito en disco pero el contenedor no lo cargó: pulsa «Aplicar configuración»"}
 
     def connected(self):
         try:

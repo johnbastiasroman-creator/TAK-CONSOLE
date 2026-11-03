@@ -452,3 +452,54 @@ def test_pagina_del_modulo_muestra_el_diseno(client):
     html = client.get("/m/jitsi").get_data(as_text=True)
     assert 'name="theme"' in html and 'name="app_name"' in html and 'name="subtitle"' in html
     assert "Tactical VCO" in html
+
+
+# ── diagnóstico del diseño ─────────────────────────────────────────────────
+class _Res:
+    def __init__(self, ok, output=""):
+        self.ok, self.output = ok, output
+
+
+def _diseno(checks):
+    return [c for c in checks if c["label"] == "Diseño de la página"]
+
+
+def test_diagnostico_instalacion_anterior_sin_tema(data_dir, monkeypatch):
+    _estados(monkeypatch, set(jitsi.SERVICES))
+    monkeypatch.setattr(system, "listening_ports", lambda: set())
+    j = jitsi.Jitsi()
+    j.save_state(installed=True, params=P)             # sin la clave «theme»
+    (c,) = _diseno(j.checks())
+    assert c["ok"] is False and "Aplicar configuración" in c["detail"]
+
+
+def test_diagnostico_tema_desactivado_no_aparece(data_dir, monkeypatch):
+    _estados(monkeypatch, set(jitsi.SERVICES))
+    monkeypatch.setattr(system, "listening_ports", lambda: set())
+    j = jitsi.Jitsi()
+    j.save_state(installed=True, params=dict(P, theme=False))
+    assert _diseno(j.checks()) == []
+
+
+def test_diagnostico_tema_en_disco_y_en_el_contenedor(data_dir, monkeypatch):
+    _estados(monkeypatch, set(jitsi.SERVICES))
+    monkeypatch.setattr(system, "listening_ports", lambda: set())
+    j = jitsi.Jitsi()
+    j.save_state(installed=True, params=dict(TP))
+    (c,) = _diseno(j.checks())                          # sin archivos
+    assert c["ok"] is False and "falta custom-config.js" in c["detail"]
+    f = jitsi.config_dir() / jitsi.THEME_FILES[1]
+    f.parent.mkdir(parents=True)
+    f.write_text("x")
+    pedidos = []
+    monkeypatch.setattr(docker, "exec_", lambda *a, **k: pedidos.append(a) or _Res(True, "0\n"))
+    (c,) = _diseno(j.checks())                          # en disco, pero el contenedor no lo cargó
+    assert c["ok"] is False and "no lo cargó" in c["detail"]
+    assert pedidos[0][0] == "tak-console-jitsi-web" and "/run/web/config/config.js" in pedidos[0]
+    monkeypatch.setattr(docker, "exec_", lambda *a, **k: _Res(True, "1\n"))
+    (c,) = _diseno(j.checks())
+    assert c["ok"] is True
+
+
+def test_subtitulo_por_defecto_con_tilde():
+    assert jitsi.DEFAULT_SUBTITLE == "Sistema de Video Conferencia Táctica"
