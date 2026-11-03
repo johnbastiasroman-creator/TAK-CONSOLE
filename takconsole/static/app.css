@@ -149,6 +149,8 @@ meter::-moz-meter-bar { background: var(--ok); border-radius: 3px; }
 .btn.small { padding: 7px 11px; font-size: 13.5px; }
 .btn[disabled], .btn.busy { opacity: .55; cursor: progress; }
 .btnrow { display: flex; flex-wrap: wrap; gap: 8px; }
+.head-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 8px; }
+.btn[hidden] { display: none; }
 
 /* ── Página de módulo ───────────────────────────────────────────────────── */
 .module { display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(320px, 0.9fr); gap: 24px; align-items: start; }
