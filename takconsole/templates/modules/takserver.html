@@ -6,7 +6,13 @@
   <div class="title">{{ led(status.level, big=True) }}
     <div><h1>TAK Server</h1><p>{{ status.label }}{% if status.version %}, versión {{ status.version }}{% endif %}</p></div>
   </div>
-  {{ control_buttons(m, actions, status) }}
+  <div class="head-actions">
+    {{ control_buttons(m, actions, status) }}
+    {% if status.installed %}
+    <a class="btn small" id="webtak-link" data-open-port="8443" data-open-path="/webtak/index.html" href="#" target="_blank" rel="noopener" hidden
+       title="Abre WebTAK (TAK en el navegador) en otra ventana. Puerto 8443 (el mismo de «Admin con certificado»).">WebTAK</a>
+    {% endif %}
+  </div>
 </div>
 
 <div class="module">

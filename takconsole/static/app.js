@@ -262,6 +262,12 @@
     });
   });
 
+  // Enlaces a otro puerto del mismo servidor (p. ej. WebTAK): usan la dirección con la que se abrió la consola.
+  $$("[data-open-port]").forEach((a) => {
+    a.href = "https://" + location.hostname + ":" + a.dataset.openPort + (a.dataset.openPath || "/");
+    a.hidden = false;
+  });
+
   $$("[data-copy]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const code = btn.parentElement.querySelector("code");

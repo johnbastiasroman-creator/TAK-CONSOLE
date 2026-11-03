@@ -130,3 +130,15 @@ def test_nombres_visibles_de_los_servicios(client):
     assert client.get("/m/jitsi").status_code == 200 and client.get("/m/mediamtx").status_code == 200
     red = client.get("/network").get_data(as_text=True)
     assert "Streaming Server" in red and "MediaMTX" not in red
+
+
+def test_boton_webtak_solo_con_tak_server_instalado(client, monkeypatch):
+    from takconsole.modules import takserver
+    monkeypatch.setattr(takserver.TakServer, "package_version", lambda self: None)
+    assert "data-open-port" not in client.get("/m/takserver").get_data(as_text=True)
+    monkeypatch.setattr(takserver.TakServer, "package_version", lambda self: "5.8-RELEASE92")
+    html = client.get("/m/takserver").get_data(as_text=True)
+    assert 'data-open-port="8443"' in html and 'data-open-path="/webtak/index.html"' in html
+    assert 'target="_blank"' in html and 'rel="noopener"' in html
+    js = (__import__("pathlib").Path(takserver.__file__).parent.parent / "static" / "app.js").read_text()
+    assert "data-open-port" in js and "location.hostname" in js
