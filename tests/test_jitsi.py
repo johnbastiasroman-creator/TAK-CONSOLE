@@ -357,3 +357,98 @@ def test_desinstalar_conserva_la_configuracion(data_dir, monkeypatch):
 
 def test_acciones_de_control(data_dir):
     assert set(jitsi.Jitsi().actions()) == {"start", "stop", "restart"}
+
+
+# ── diseño de la página de inicio ──────────────────────────────────────────
+TP = dict(P, theme=True, app_name="Tactical VCO", subtitle="Sistema de Video Conferencia Tactica")
+
+
+def test_tema_archivos_solo_ascii_y_con_el_nombre(data_dir):
+    files = jitsi.theme_files(TP)
+    assert set(files) == set(jitsi.THEME_FILES)
+    assert files["web/custom-interface_config.js"].splitlines()[-1] == 'interfaceConfig.APP_NAME = "Tactical VCO";'
+    for text in files.values():
+        assert text.isascii()
+    css = json.loads(files["web/custom-config.js"].split("s.textContent = ")[1].split(";\n")[0])
+    assert 'content: "Tactical VCO";' in css
+    assert 'content: "Sistema de Video Conferencia Tactica";' in css
+    assert "__TITLE__" not in css and "__SUBTITLE__" not in css
+
+
+def test_tema_escapa_tildes_para_css(data_dir):
+    p = dict(TP, subtitle="Videoconferencia Táctica", app_name="Ñandú")
+    files = jitsi.theme_files(p)
+    css = json.loads(files["web/custom-config.js"].split("s.textContent = ")[1].split(";\n")[0])
+    assert 'content: "Videoconferencia T\\E1 ctica";' in css      # \E1 + espacio = «á»
+    assert 'content: "\\D1 and\\FA ";' in css
+    assert json.loads(files["web/custom-interface_config.js"].split("= ")[1].rstrip(";\n")) == "Ñandú"
+
+
+def test_tema_css_solo_toca_la_pagina_de_bienvenida():
+    import re
+    css = jitsi.THEME_CSS.read_text(encoding="utf-8")
+    css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
+    selectors = [s.strip() for block in re.findall(r"([^{}]+)\{", css) for s in block.split(",")]
+    assert selectors
+    # nada fuera de body.welcome-page: la sala de reunión conserva su aspecto
+    assert all(s.startswith("body.welcome-page") for s in selectors), \
+        [s for s in selectors if not s.startswith("body.welcome-page")]
+    # monocromático: ningún color con matiz (cada #rgb/#rrggbb con r=g=b) ni rgba con canales distintos
+    for hexv in re.findall(r"#([0-9a-fA-F]{6})\b", css):
+        assert hexv[0:2] == hexv[2:4] == hexv[4:6], hexv
+    for r, g, b in re.findall(r"rgba?\((\d+),\s*(\d+),\s*(\d+)", css):
+        assert r == g == b
+
+
+@pytest.mark.skipif(not shutil.which("node"), reason="requiere node")
+def test_tema_javascript_valido(tmp_path, data_dir):
+    for rel, text in jitsi.theme_files(TP).items():
+        f = tmp_path / rel.replace("/", "_")
+        f.write_text(text)
+        res = subprocess.run(["node", "--check", str(f)], capture_output=True, text=True)
+        assert res.returncode == 0, res.stderr
+
+
+@pytest.mark.parametrize("campo", ["app_name", "subtitle"])
+@pytest.mark.parametrize("valor", ['a"b', "a'b", "a\\b", "a<b", "a>b", "a;b", "a{b}", "x" * 61, "a\nb",
+                                   "</style><script>"])
+def test_tema_rechaza_texto_peligroso(data_dir, ips, campo, valor):
+    data = form(host=IPS[0], bind_ip=IPS[0], theme="1")
+    data[campo] = valor
+    _, errors = jitsi.Jitsi().validate_deploy(data)
+    assert campo in errors
+
+
+def test_tema_acepta_tildes_y_signos_simples(data_dir, ips):
+    data = form(host=IPS[0], bind_ip=IPS[0], theme="1")
+    data["app_name"], data["subtitle"] = "Tactical VCO (Ñ)", "Sistema de Video Conferencia Táctica, 2.0"
+    p, errors = jitsi.Jitsi().validate_deploy(data)
+    assert not errors and p["theme"] is True and p["app_name"] == "Tactical VCO (Ñ)"
+
+
+def test_tema_por_defecto_y_sin_tema(data_dir, ips):
+    p, errors = jitsi.Jitsi().validate_deploy(form(host=IPS[0], bind_ip=IPS[0], theme="1"))
+    assert not errors and (p["app_name"], p["subtitle"]) == (jitsi.DEFAULT_APP_NAME, jitsi.DEFAULT_SUBTITLE)
+    p, errors = jitsi.Jitsi().validate_deploy(form(host=IPS[0], bind_ip=IPS[0]))
+    assert not errors and p["theme"] is False
+
+
+def test_despliegue_escribe_y_quita_el_tema(data_dir, monkeypatch):
+    FakeDocker(monkeypatch)
+    j = jitsi.Jitsi()
+    j.deploy(_job(), dict(TP))
+    cfg = jitsi.config_dir()
+    for rel in jitsi.THEME_FILES:
+        assert oct((cfg / rel).stat().st_mode & 0o777) == "0o644"   # no son secretos
+        assert (cfg / rel).read_text().isascii()
+    assert "Tactical VCO" in (cfg / "web/custom-interface_config.js").read_text()
+    j.deploy(_job(), dict(TP, theme=False))
+    assert not any((cfg / rel).exists() for rel in jitsi.THEME_FILES)
+    j.deploy(_job(), dict(P))                  # parámetros de una instalación anterior, sin claves de tema
+    assert not any((cfg / rel).exists() for rel in jitsi.THEME_FILES)
+
+
+def test_pagina_del_modulo_muestra_el_diseno(client):
+    html = client.get("/m/jitsi").get_data(as_text=True)
+    assert 'name="theme"' in html and 'name="app_name"' in html and 'name="subtitle"' in html
+    assert "Tactical VCO" in html

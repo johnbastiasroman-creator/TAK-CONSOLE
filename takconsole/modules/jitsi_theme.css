@@ -1,0 +1,56 @@
+/* Diseño monocromático de la página de bienvenida de Jitsi Meet (tonos de negro).
+   Todo va bajo body.welcome-page: no toca la pantalla de la reunión. */
+body.welcome-page { background: #0a0a0a; color: #d6d6d6; }
+body.welcome-page .welcome { background-color: #0a0a0a; color: #d6d6d6; }
+
+/* Cabecera: la imagen original pasada a escala de grises y oscurecida */
+body.welcome-page .welcome .header {
+  background-color: #000;
+  background-image: linear-gradient(rgba(0,0,0,.6), rgba(0,0,0,.6)), linear-gradient(#808080, #808080), url(/images/welcome-background.png);
+  background-blend-mode: normal, saturation, normal;
+  border-bottom: 1px solid #2c2c2c;
+}
+
+/* Título y subtítulo: se oculta el texto traducido y se pinta el configurado en su lugar
+   (__TITLE__ y __SUBTITLE__ los pone la consola), conservando tamaño y espacio originales. */
+body.welcome-page .welcome .header-text-title,
+body.welcome-page .welcome .header-text-subtitle { visibility: hidden; position: relative; white-space: nowrap; }
+body.welcome-page .welcome .header-text-title::after,
+body.welcome-page .welcome .header-text-subtitle::after {
+  visibility: visible; position: absolute; left: 50%; top: 0; transform: translateX(-50%); color: #f0f0f0; white-space: nowrap;
+}
+body.welcome-page .welcome .header-text-title::after { content: "__TITLE__"; }
+body.welcome-page .welcome .header-text-subtitle::after { content: "__SUBTITLE__"; font-weight: 500; color: #cfcfcf; }
+
+/* Ajustes (engranaje) */
+body.welcome-page .welcome .welcome-page-settings { background: rgba(255,255,255,.1); border: 1px solid #333; }
+
+/* Campo de reunión y botón */
+body.welcome-page .welcome #enter_room .join-meeting-container { background: rgba(18,18,18,.88); border: 1px solid #3a3a3a; color: #e6e6e6; }
+body.welcome-page .welcome #enter_room .enter-room-input-container .enter-room-input { background: transparent; color: #e6e6e6; }
+body.welcome-page .welcome .header ::placeholder { color: #8a8a8a; }
+body.welcome-page .welcome #enter_room .enter-room-input-container .enter-room-input.focus-visible { outline: 2px solid #bdbdbd; }
+body.welcome-page .welcome .welcome-page-button { background: #2a2a2a; border: 1px solid #4a4a4a; color: #f0f0f0; }
+body.welcome-page .welcome .welcome-page-button:hover { background: #3a3a3a; }
+body.welcome-page .welcome .welcome-page-button:focus-within { outline: 2px solid #bdbdbd; }
+
+/* Avisos de la cabecera, sin rojo */
+body.welcome-page .welcome .header .not-allow-title-character-div { background: #1a1a1a; color: #d6d6d6; border: 1px solid #3a3a3a; }
+body.welcome-page .welcome .header .not-allow-title-character-div .jitsi-icon svg { fill: #d6d6d6; }
+body.welcome-page .welcome .header .insecure-room-name-warning { color: #bdbdbd; }
+body.welcome-page .welcome .header .insecure-room-name-warning .jitsi-icon svg { fill: #bdbdbd; }
+
+/* Tarjetas (antes celestes) */
+body.welcome-page .welcome .welcome-cards-container { color: #d6d6d6; }
+body.welcome-page .welcome .welcome-card--blue,
+body.welcome-page .welcome .welcome-card--grey { background: #161616; border: 1px solid #333; }
+body.welcome-page .welcome .welcome-card--dark { background: #1c1c1c; border: 1px solid #333; color: #e6e6e6; }
+body.welcome-page .welcome .meetings-list .meetings-list-empty .description,
+body.welcome-page .welcome .meetings-list-empty .description { color: #c8c8c8; }
+body.welcome-page .welcome .tab-container .tab-buttons { background: #0f0f0f; color: #bdbdbd; border: 1px solid #2c2c2c; }
+body.welcome-page .welcome .tab-container .tab-buttons [role="tab"] { background: #0f0f0f; color: #bdbdbd; }
+body.welcome-page .welcome .tab-container .tab-buttons [role="tab"][aria-selected="true"] { background: #2a2a2a; color: #fff; }
+
+/* Pie de página: sin textos ni imágenes, solo la franja negra */
+body.welcome-page .welcome .welcome-footer { background: #000; border-top: 1px solid #2c2c2c; margin-top: 40px; min-height: 72px; }
+body.welcome-page .welcome .welcome-footer > * { display: none; }

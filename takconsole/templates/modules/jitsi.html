@@ -46,6 +46,14 @@
           </div>
         </fieldset>
         <fieldset>
+          <legend>Diseño de la página de inicio</legend>
+          {{ check('theme', 'Usar el diseño monocromático', p.get('theme', True), hint='Cabecera y pie negros, resto en tonos de negro y gris, sin textos ni imágenes en el pie. Solo cambia la página de inicio; la sala de reunión no se toca.') }}
+          <div class="grid2">
+            {{ input('app_name', 'Título', p.app_name or default_app_name, hint='Reemplaza «Jitsi Meet» en la página y en la pestaña.') }}
+            {{ input('subtitle', 'Subtítulo', p.subtitle or default_subtitle) }}
+          </div>
+        </fieldset>
+        <fieldset>
           <legend>Certificado y red</legend>
           {{ check('tls', 'Usar certificado firmado por la CA de TAK', p.get('tls', False), hint='Los equipos que confían en tu CA de TAK validan el servidor.' if tak_ca else 'Disponible cuando TAK Server esté desplegado. Sin esto, Jitsi usa un certificado autofirmado: el navegador pedirá aceptarlo y las apps móviles de Jitsi no se conectarán.') }}
           {{ check('stun', 'Permitir STUN público', p.get('stun', False), hint='Si se marca, el videopuente consulta servidores STUN de Internet para averiguar su IP. Déjalo sin marcar en redes privadas o aisladas.') }}
