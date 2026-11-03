@@ -503,3 +503,8 @@ def test_diagnostico_tema_en_disco_y_en_el_contenedor(data_dir, monkeypatch):
 
 def test_subtitulo_por_defecto_con_tilde():
     assert jitsi.DEFAULT_SUBTITLE == "Sistema de Video Conferencia Táctica"
+
+
+def test_tema_oculta_el_logotipo_de_jitsi():
+    css = jitsi.THEME_CSS.read_text(encoding="utf-8")
+    assert "body.welcome-page .welcome .header-watermark-container { display: none; }" in css
