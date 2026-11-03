@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_macros.html" import not_deployed_note, led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
-{% block title %}Jitsi Meet{% endblock %}
+{% block title %}Tactical VCO{% endblock %}
 {% block content %}
 <div class="page-head">
   <div class="title">{{ led(status.level, big=True) }}
-    <div><h1>Jitsi Meet</h1><p>{{ status.label }}. Videollamadas en el navegador, con salas por enlace.</p></div>
+    <div><h1>Tactical VCO</h1><p>{{ status.label }}. Videollamadas en el navegador, con salas por enlace.</p></div>
   </div>
   {{ control_buttons(m, actions, status) }}
 </div>
@@ -21,14 +21,14 @@
           <legend>Dirección de acceso</legend>
           {% if ips %}
           <div class="field" data-field="host">
-            <label for="f-host">Dirección con la que se abrirá Jitsi</label>
+            <label for="f-host">Dirección con la que se abrirá Tactical VCO</label>
             <input id="f-host" name="host" type="text" list="jitsi-hosts" value="{{ p.host or default_host }}" autocomplete="off">
             <datalist id="jitsi-hosts">{% for ip in ips %}<option value="{{ ip }}">{% endfor %}</datalist>
-            <span class="hint">Una IP del servidor o un nombre que los equipos resuelvan. Todos deben abrir <strong>esta misma dirección</strong>: la web de Jitsi la usa para conectarse.</span>
+            <span class="hint">Una IP del servidor o un nombre que los equipos resuelvan. Todos deben abrir <strong>esta misma dirección</strong>: la web de Tactical VCO la usa para conectarse.</span>
             <span class="err" role="alert"></span>
           </div>
           {% else %}
-          {{ input('host', 'Dirección con la que se abrirá Jitsi', p.host or '', hint='No se detectaron IP en este equipo; escribe la del servidor.') }}
+          {{ input('host', 'Dirección con la que se abrirá Tactical VCO', p.host or '', hint='No se detectaron IP en este equipo; escribe la del servidor.') }}
           {% endif %}
           {{ input('https_port', 'Puerto HTTPS', https_port, type='number', attrs='min=1 max=65535', hint='443 es el habitual; si ya está en uso, elige otro (queda en la dirección).') }}
         </fieldset>
@@ -41,7 +41,7 @@
             {% else %}
             <p class="muted">No se detectaron direcciones IPv4 en este equipo.</p>
             {% endfor %}
-            <span class="hint">La web (HTTPS) y el audio/video (UDP {{ jvb_port }}) solo escuchan en las direcciones marcadas. Docker se salta UFW, así que esta es la forma de limitar el acceso: la política de «Red y firewall» no se aplica a Jitsi.</span>
+            <span class="hint">La web (HTTPS) y el audio/video (UDP {{ jvb_port }}) solo escuchan en las direcciones marcadas. Docker se salta UFW, así que esta es la forma de limitar el acceso: la política de «Red y firewall» no se aplica a Tactical VCO.</span>
             <span class="err" role="alert"></span>
           </div>
         </fieldset>
@@ -55,13 +55,13 @@
         </fieldset>
         <fieldset>
           <legend>Certificado y red</legend>
-          {{ check('tls', 'Usar certificado firmado por la CA de TAK', p.get('tls', False), hint='Los equipos que confían en tu CA de TAK validan el servidor.' if tak_ca else 'Disponible cuando TAK Server esté desplegado. Sin esto, Jitsi usa un certificado autofirmado: el navegador pedirá aceptarlo y las apps móviles de Jitsi no se conectarán.') }}
+          {{ check('tls', 'Usar certificado firmado por la CA de TAK', p.get('tls', False), hint='Los equipos que confían en tu CA de TAK validan el servidor.' if tak_ca else 'Disponible cuando TAK Server esté desplegado. Sin esto, el servidor usa un certificado autofirmado: el navegador pedirá aceptarlo y las apps móviles de Jitsi no se conectarán.') }}
           {{ check('stun', 'Permitir STUN público', p.get('stun', False), hint='Si se marca, el videopuente consulta servidores STUN de Internet para averiguar su IP. Déjalo sin marcar en redes privadas o aisladas.') }}
           {{ input('tz', 'Zona horaria', p.tz or default_tz, hint='Solo afecta a los registros.') }}
         </fieldset>
         <div class="note"><p>Acceso abierto: quien llegue a la dirección puede crear salas y hablar. Limita las direcciones donde escucha o usa una red de confianza como ZeroTier.</p></div>
         <div class="formfoot">
-          <button class="btn primary" type="submit">{{ 'Aplicar configuración' if status.installed else 'Desplegar Jitsi Meet' }}</button>
+          <button class="btn primary" type="submit">{{ 'Aplicar configuración' if status.installed else 'Desplegar Tactical VCO' }}</button>
           <span class="muted">Versión {{ release }}</span>
         </div>
       </form>
@@ -73,7 +73,7 @@
     {{ job_console(m.key, last_job) }}
     {% if status.installed %}
     <section class="panel">
-      <h2>Abrir Jitsi</h2>
+      <h2>Abrir Tactical VCO</h2>
       {{ readouts(status.endpoints) }}
       <div class="field mt"><label>Dirección</label>
         <div class="copy"><code>https://{{ p.host }}{{ '' if https_port|int == 443 else ':' ~ https_port }}</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>

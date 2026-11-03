@@ -815,7 +815,7 @@ class TakServer(Module):
         job.ok("Estado de la consola restablecido")
         job.warn("No se restauraron los respaldos de pg_hba.conf y postgresql.conf que dejó TAK Server "
                  "(*.backup-<fecha>). Los certificados que otros módulos firmaron con la CA borrada "
-                 "(Mumble, RTSPS de MediaMTX) no se podrán renovar con ella: vuelve a desplegarlos "
+                 "(Mumble, RTSPS de Streaming Server) no se podrán renovar con ella: vuelve a desplegarlos "
                  "tras la nueva instalación.")
 
 

@@ -1,10 +1,10 @@
 {% extends "base.html" %}
 {% from "_macros.html" import not_deployed_note, led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
-{% block title %}MediaMTX{% endblock %}
+{% block title %}Streaming Server{% endblock %}
 {% block content %}
 <div class="page-head">
   <div class="title">{{ led(status.level, big=True) }}
-    <div><h1>MediaMTX</h1><p>{{ status.label }}. Video en vivo para ATAK, CloudTAK y navegadores.</p></div>
+    <div><h1>Streaming Server</h1><p>{{ status.label }}. Video en vivo para ATAK, CloudTAK y navegadores.</p></div>
   </div>
   {{ control_buttons(m, actions, status) }}
 </div>
@@ -50,7 +50,7 @@
           </div>
         </fieldset>
         <div class="formfoot">
-          <button class="btn primary" type="submit">{{ 'Aplicar configuración' if status.installed else 'Desplegar MediaMTX' }}</button>
+          <button class="btn primary" type="submit">{{ 'Aplicar configuración' if status.installed else 'Desplegar Streaming Server' }}</button>
           <span class="muted">Imagen {{ image }}</span>
         </div>
       </form>
@@ -61,7 +61,7 @@
     {% if status.installed %}
     <section class="panel">
       <h2>Transmisiones activas</h2>
-      <p>Se actualiza cada 5 segundos desde la API local de MediaMTX.</p>
+      <p>Se actualiza cada 5 segundos desde la API local de Streaming Server.</p>
       <table class="list" data-mtx-paths>
         <thead><tr><th>Ruta</th><th>Fuente</th><th>Pistas</th><th>Lectores</th></tr></thead>
         <tbody><tr><td colspan="4" class="muted">Cargando…</td></tr></tbody>

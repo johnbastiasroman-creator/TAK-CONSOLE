@@ -153,7 +153,7 @@ def compose_data():
 
 class MediaMTX(Module):
     key = "mediamtx"
-    name = "MediaMTX"
+    name = "Streaming Server"
     summary = "Video en vivo de drones y cámaras: RTSP, RTMP, SRT, HLS y WebRTC"
     order = 30
     template = "modules/mediamtx.html"
@@ -186,10 +186,10 @@ class MediaMTX(Module):
         out = []
         for k, meta in PROTOCOLS.items():
             if p.get(k):
-                out += [{"port": port, "proto": proto, "label": f"MediaMTX {meta['label']}"}
+                out += [{"port": port, "proto": proto, "label": f"Streaming Server {meta['label']}"}
                         for port, proto in meta["ports"]]
         if st.get("tls"):
-            out.append({"port": RTSPS_PORT[0], "proto": RTSPS_PORT[1], "label": "MediaMTX RTSPS"})
+            out.append({"port": RTSPS_PORT[0], "proto": RTSPS_PORT[1], "label": "Streaming Server RTSPS"})
         return out
 
     def page_context(self):
@@ -268,7 +268,7 @@ class MediaMTX(Module):
         run(["docker", "run", "--rm", "-v", f"{d / 'config'}:/config:ro", IMAGE,
              "--validate-conf=/config/mediamtx.yml"], log=job.log, timeout=120)
         docker.compose(d, "up", "-d", "--force-recreate", log=job.log)
-        job.ok("MediaMTX iniciado")
+        job.ok("Streaming Server iniciado")
 
         job.step(5, total, "Firewall")
         self.save_state(installed=True, params=p, tls=p["tls"])
@@ -342,7 +342,7 @@ class MediaMTX(Module):
         except (OSError, ValueError):
             pass
         if unreachable and len(unreachable) == len(CLIENT_ENDPOINTS):
-            return monitor.table([], [], error="La API local de MediaMTX no responde.")
+            return monitor.table([], [], error="La API local de Streaming Server no responde.")
         return monitor.table(["Protocolo", "Función", "Origen", "Ruta", "Usuario", "Tiempo",
                               "Recibido", "Enviado"], rows, note=note)
 

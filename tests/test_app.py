@@ -114,3 +114,19 @@ def test_pagina_mediamtx_instalacion_anterior_conserva_credenciales(client):
     assert "rtsp://publicador:CLAVE@" in html
     assert "Credenciales actuales" in html and "pub-pass-123" in html
     assert 'name="auth" value="1" checked' in html
+
+
+def test_nombres_visibles_de_los_servicios(client):
+    """Panel (menú lateral y tarjetas), páginas de módulo y cortafuegos usan los nombres nuevos."""
+    panel = client.get("/").get_data(as_text=True)
+    assert "Tactical VCO" in panel and "Streaming Server" in panel
+    assert "Jitsi Meet" not in panel and "MediaMTX" not in panel
+    for key, nuevo, viejo in (("jitsi", "Tactical VCO", "Jitsi Meet"),
+                              ("mediamtx", "Streaming Server", "MediaMTX")):
+        html = client.get(f"/m/{key}").get_data(as_text=True)
+        assert f"<h1>{nuevo}</h1>" in html and f"<title>{nuevo}" in html
+        assert f"<h1>{viejo}</h1>" not in html
+    # las URL y los datos guardados siguen usando la clave interna
+    assert client.get("/m/jitsi").status_code == 200 and client.get("/m/mediamtx").status_code == 200
+    red = client.get("/network").get_data(as_text=True)
+    assert "Streaming Server" in red and "MediaMTX" not in red
