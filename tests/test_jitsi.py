@@ -516,3 +516,17 @@ def test_tema_oculta_el_logotipo_de_jitsi():
 def test_tema_quita_el_logotipo_tambien_en_la_reunion():
     css = jitsi.THEME_CSS.read_text(encoding="utf-8")
     assert ".watermark.leftwatermark { display: none !important; }" in css
+
+
+def test_boton_abrir_en_nueva_ventana(client, monkeypatch):
+    _estados(monkeypatch, set(jitsi.SERVICES))
+    monkeypatch.setattr(system, "listening_ports", lambda: set())
+    assert 'id="vco-link"' not in client.get("/m/jitsi").get_data(as_text=True)    # sin instalar
+    j = jitsi.Jitsi()
+    j.save_state(installed=True, params=P)
+    html = client.get("/m/jitsi").get_data(as_text=True)
+    assert 'id="vco-link"' in html and 'href="https://10.147.17.5"' in html          # 443: sin puerto
+    assert 'target="_blank"' in html and 'rel="noopener"' in html
+    j.save_state(installed=True, params=dict(P, https_port=8443, host="vco.local"))
+    html = client.get("/m/jitsi").get_data(as_text=True)
+    assert 'href="https://vco.local:8443"' in html
