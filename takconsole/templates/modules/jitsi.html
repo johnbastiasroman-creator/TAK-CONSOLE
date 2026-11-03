@@ -6,7 +6,13 @@
   <div class="title">{{ led(status.level, big=True) }}
     <div><h1>Tactical VCO</h1><p>{{ status.label }}. Videollamadas en el navegador, con salas por enlace.</p></div>
   </div>
-  {{ control_buttons(m, actions, status) }}
+  <div class="head-actions">
+    {{ control_buttons(m, actions, status) }}
+    {% if status.installed and open_url %}
+    <a class="btn small" id="vco-link" href="{{ open_url }}" target="_blank" rel="noopener"
+       title="Abre Tactical VCO en otra ventana, con la dirección configurada en este módulo.">Abrir Tactical VCO</a>
+    {% endif %}
+  </div>
 </div>
 
 <div class="module">

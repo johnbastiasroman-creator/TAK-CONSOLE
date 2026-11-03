@@ -231,7 +231,9 @@ class Jitsi(Module):
                 "release": RELEASE, "https_port": p.get("https_port", DEFAULT_HTTPS_PORT),
                 "jvb_port": JVB_PORT, "default_host": (ips[0] if ips else ""),
                 "default_tz": system_tz(), "default_app_name": DEFAULT_APP_NAME,
-                "default_subtitle": DEFAULT_SUBTITLE}
+                "default_subtitle": DEFAULT_SUBTITLE,
+                "open_url": public_url(p["host"], p.get("https_port", DEFAULT_HTTPS_PORT))
+                if p.get("host") else ""}
 
     # ── despliegue ──────────────────────────────────────────────────────────
     def validate_deploy(self, data):
