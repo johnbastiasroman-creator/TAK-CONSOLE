@@ -137,7 +137,8 @@ def theme_files(p):
     css = css.replace("__TITLE__", _css_string(p["app_name"])).replace(
         "__SUBTITLE__", _css_string(p["subtitle"]))
     interface = ("// Generado por TAK-CONSOLE\n"
-                 f"interfaceConfig.APP_NAME = {json.dumps(p['app_name'])};\n")
+                 f"interfaceConfig.APP_NAME = {json.dumps(p['app_name'])};\n"
+                 "interfaceConfig.SHOW_JITSI_WATERMARK = false;\n")
     custom = ("// Generado por TAK-CONSOLE: aplica el tema monocromatico a la pagina de bienvenida.\n"
               "(function () {\n"
               "  try {\n"

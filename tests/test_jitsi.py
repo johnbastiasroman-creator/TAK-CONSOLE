@@ -366,7 +366,9 @@ TP = dict(P, theme=True, app_name="Tactical VCO", subtitle="Sistema de Video Con
 def test_tema_archivos_solo_ascii_y_con_el_nombre(data_dir):
     files = jitsi.theme_files(TP)
     assert set(files) == set(jitsi.THEME_FILES)
-    assert files["web/custom-interface_config.js"].splitlines()[-1] == 'interfaceConfig.APP_NAME = "Tactical VCO";'
+    lines = files["web/custom-interface_config.js"].splitlines()
+    assert 'interfaceConfig.APP_NAME = "Tactical VCO";' in lines
+    assert lines[-1] == "interfaceConfig.SHOW_JITSI_WATERMARK = false;"   # logo fuera en prejoin y reunión
     for text in files.values():
         assert text.isascii()
     css = json.loads(files["web/custom-config.js"].split("s.textContent = ")[1].split(";\n")[0])
@@ -381,7 +383,8 @@ def test_tema_escapa_tildes_para_css(data_dir):
     css = json.loads(files["web/custom-config.js"].split("s.textContent = ")[1].split(";\n")[0])
     assert 'content: "Videoconferencia T\\E1 ctica";' in css      # \E1 + espacio = «á»
     assert 'content: "\\D1 and\\FA ";' in css
-    assert json.loads(files["web/custom-interface_config.js"].split("= ")[1].rstrip(";\n")) == "Ñandú"
+    nombre = next(l for l in files["web/custom-interface_config.js"].splitlines() if "APP_NAME" in l)
+    assert json.loads(nombre.split("= ")[1].rstrip(";")) == "Ñandú"
 
 
 def test_tema_css_solo_toca_la_pagina_de_bienvenida():
@@ -390,9 +393,9 @@ def test_tema_css_solo_toca_la_pagina_de_bienvenida():
     css = re.sub(r"/\*.*?\*/", "", css, flags=re.S)
     selectors = [s.strip() for block in re.findall(r"([^{}]+)\{", css) for s in block.split(",")]
     assert selectors
-    # nada fuera de body.welcome-page: la sala de reunión conserva su aspecto
-    assert all(s.startswith("body.welcome-page") for s in selectors), \
-        [s for s in selectors if not s.startswith("body.welcome-page")]
+    # nada fuera de body.welcome-page salvo el logotipo: la sala de reunión conserva su aspecto
+    fuera = [s for s in selectors if not s.startswith("body.welcome-page")]
+    assert fuera == [".watermark.leftwatermark"], fuera
     # monocromático: ningún color con matiz (cada #rgb/#rrggbb con r=g=b) ni rgba con canales distintos
     for hexv in re.findall(r"#([0-9a-fA-F]{6})\b", css):
         assert hexv[0:2] == hexv[2:4] == hexv[4:6], hexv
@@ -508,3 +511,8 @@ def test_subtitulo_por_defecto_con_tilde():
 def test_tema_oculta_el_logotipo_de_jitsi():
     css = jitsi.THEME_CSS.read_text(encoding="utf-8")
     assert "body.welcome-page .welcome .header-watermark-container { display: none; }" in css
+
+
+def test_tema_quita_el_logotipo_tambien_en_la_reunion():
+    css = jitsi.THEME_CSS.read_text(encoding="utf-8")
+    assert ".watermark.leftwatermark { display: none !important; }" in css
