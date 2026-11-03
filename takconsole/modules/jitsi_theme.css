@@ -57,3 +57,8 @@ body.welcome-page .welcome .header-watermark-container { display: none; }
 /* Pie de página: sin textos ni imágenes, solo la franja negra */
 body.welcome-page .welcome .welcome-footer { background: #000; border-top: 1px solid #2c2c2c; margin-top: 40px; min-height: 72px; }
 body.welcome-page .welcome .welcome-footer > * { display: none; }
+
+/* Logotipo de Jitsi también al crear/unirse a una reunión y dentro de ella (esas pantallas no
+   llevan body.welcome-page). Lo normal es que SHOW_JITSI_WATERMARK=false ya lo quite; esta regla
+   es el respaldo. Es absoluto: no mueve nada. */
+.watermark.leftwatermark { display: none !important; }
