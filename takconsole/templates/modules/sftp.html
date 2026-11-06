@@ -1,0 +1,98 @@
+{% extends "base.html" %}
+{% from "_macros.html" import not_deployed_note, led, readouts, input, check, job_console, control_buttons, uninstall_panel, monitor_panel %}
+{% block title %}Repositorio SFTP{% endblock %}
+{% block content %}
+<div class="page-head">
+  <div class="title">{{ led(status.level, big=True) }}
+    <div><h1>Repositorio SFTP</h1><p>{{ status.label }}. Archivos y carpetas por SFTP o desde el navegador.</p></div>
+  </div>
+  <div class="head-actions">
+    {{ control_buttons(m, actions, status) }}
+    {% if status.installed %}
+    <a class="btn small primary" id="sftp-web-link" data-open-scheme="{{ scheme }}" data-open-port="{{ http_port }}" data-open-path="/web/client" href="#" target="_blank" rel="noopener" hidden
+       title="Abre el cliente web del repositorio en otra ventana: subir archivos, crear carpetas, descargar.">Abrir repositorio</a>
+    {% if can('admin') %}
+    <a class="btn small" id="sftp-admin-link" data-open-scheme="{{ scheme }}" data-open-port="{{ http_port }}" data-open-path="/web/admin" href="#" target="_blank" rel="noopener" hidden
+       title="Abre la administración de SFTPGo en otra ventana: usuarios, permisos y cuotas.">Administración</a>
+    {% endif %}
+    {% endif %}
+  </div>
+</div>
+
+<div class="module">
+  <div>
+    {{ not_deployed_note(status) }}
+    {% if can('admin') %}
+    <section class="panel">
+      <h2>Configuración</h2>
+      <p>Servidor SFTPGo. Un mismo servicio ofrece SFTP (WinSCP, FileZilla, <code>sftp</code>…) y un cliente web donde se suben archivos y se crean carpetas. Los equipos de tu VPN lo alcanzan por la dirección ZeroTier de este servidor.</p>
+      <form data-api="/api/m/sftp/deploy" data-reload>
+        <fieldset>
+          <legend>Acceso web</legend>
+          <div class="grid2">
+            {{ input('http_port', 'Puerto del cliente web', http_port, type='number', attrs='min=1024 max=65535', hint='Predeterminado ' ~ default_http_port ~ '. El SFTP usa el ' ~ sftp_port ~ '.') }}
+          </div>
+          {{ check('tls', 'Servir la web con HTTPS (certificado de la consola)', p.get('tls', False), hint='El navegador avisará de un certificado no reconocido, igual que con la consola. Sin esto la web va en HTTP; el tráfico de la VPN ya viaja cifrado por ZeroTier.') }}
+        </fieldset>
+        <fieldset>
+          <legend>Administrador de SFTPGo</legend>
+          <div class="grid2">
+            {{ input('admin_user', 'Usuario', p.admin_user or 'admin') }}
+            {{ input('admin_pass', 'Contraseña', '', type='password', autocomplete='new-password', hint='Vacía: se conserva o se genera.') }}
+          </div>
+          <p class="muted">Solo se aplica la primera vez, cuando SFTPGo crea su administrador. Si luego la cambias dentro de «Administración», la consola ya no la conoce.</p>
+        </fieldset>
+        <fieldset>
+          <legend>Usuario del repositorio</legend>
+          <div class="grid2">
+            {{ input('repo_user', 'Usuario', p.repo_user or 'repositorio') }}
+            {{ input('repo_pass', 'Contraseña', '', type='password', autocomplete='new-password', hint='Vacía: se conserva o se genera.') }}
+          </div>
+          <p class="muted">Se crea con acceso completo a su propia carpeta. Puedes añadir más usuarios, con permisos o carpetas distintas, en «Administración».</p>
+        </fieldset>
+        <div class="formfoot">
+          <button class="btn primary" type="submit">{{ 'Aplicar configuración' if status.installed else 'Desplegar repositorio' }}</button>
+          <span class="muted">Imagen {{ image }}</span>
+        </div>
+      </form>
+    </section>
+    {% endif %}
+
+    {% if status.installed %}
+    <section class="panel">
+      <h2>Registro del servidor</h2>
+      <button class="btn small" type="button" data-logs="/api/m/sftp/logs" data-target="sftp-logs">Ver registro</button>
+      <pre class="logs" id="sftp-logs" hidden></pre>
+    </section>
+    {% endif %}
+  </div>
+
+  <aside>
+    {{ job_console(m.key, last_job) }}
+    {% if status.installed %}
+    <section class="panel">
+      <h2>Conectar desde otro equipo</h2>
+      {{ readouts(status.endpoints) }}
+      {% for h in hosts %}
+      <div class="field mt"><label>Navegador{% if loop.first %} (recomendado){% endif %}</label>
+        <div class="copy"><code>{{ scheme }}://{{ h }}:{{ http_port }}/web/client</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>
+      <div class="field"><label>SFTP</label>
+        <div class="copy"><code>sftp://{{ p.repo_user or 'repositorio' }}@{{ h }}:{{ sftp_port }}</code><button class="btn small" type="button" data-copy>Copiar</button></div></div>
+      {% endfor %}
+      <p class="muted mt">Usa la dirección ZeroTier del servidor desde los equipos de la VPN. Con la exposición limitada a ZeroTier (red del firewall) el repositorio no se ve fuera de ella.</p>
+      {% if can('admin') %}
+      <details class="mt"><summary>Credenciales actuales</summary>
+        <dl class="facts">
+          <dt>Administrador</dt><dd>{{ p.admin_user }} / {{ p.admin_pass }}</dd>
+          <dt>Repositorio</dt><dd>{{ p.repo_user }} / {{ p.repo_pass }}</dd>
+        </dl>
+        <p class="muted">Si cambiaste una contraseña dentro de SFTPGo, la mostrada aquí puede estar desactualizada.</p>
+      </details>
+      {% endif %}
+    </section>
+    {{ uninstall_panel(m) }}
+    {% endif %}
+  </aside>
+</div>
+{{ monitor_panel(m, status) }}
+{% endblock %}

@@ -17,6 +17,15 @@ Mumble server 1.6.870 BSD 3-Clause License. https://github.com/mumble-voip/mumbl
   (mumblevoip/mumble-server; imagen Docker oficial bajo BSD 3-Clause,
    https://github.com/mumble-voip/mumble-docker)
 
+SFTPGo 2.7.6         GNU Affero General Public License v3.0 (AGPL-3.0-only con términos
+  (drakkan/sftpgo)    adicionales). https://github.com/drakkan/sftpgo
+                      Se ejecuta sin modificar, como programa independiente en su propio
+                      contenedor; la consola no enlaza ni modifica su código y solo le
+                      habla por su API REST. Si lo modificas y lo ofreces como servicio
+                      de red, revisa las obligaciones de la AGPL. La interfaz web de
+                      SFTPGo incluye un tema de KeenThemes que su README declara
+                      propietario y no se distribuye con este proyecto.
+
 ZeroTier One 1.14.2   Business Source License 1.1 con "Change Date" 2026-01-01 y
   (zyclonite/zerotier) "Change License" Apache License 2.0. Según el texto de esa
                       licencia, desde la fecha de cambio la versión 1.14.2 queda

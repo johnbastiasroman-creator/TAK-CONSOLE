@@ -41,7 +41,7 @@ ENDPOINT_PERMS = {
     "logout": VIEW, "account_page": VIEW, "api_account_password": VIEW,
     # consolas de estado y actividad, y lectura de registros
     "api_monitor": MONITOR, "mtx_paths": MONITOR, "mtx_logs": MONITOR, "mumble_logs": MONITOR,
-    "tak_logs": MONITOR, "zt_logs": MONITOR,
+    "sftp_logs": MONITOR, "tak_logs": MONITOR, "zt_logs": MONITOR,
     # control de servicios ya desplegados
     "api_action": SERVICE_CONTROL,
     # TAK Server: certificados y paquetes de usuarios

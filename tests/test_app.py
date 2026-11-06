@@ -43,7 +43,7 @@ def test_bad_login_rate_limited(data_dir):
 
 
 def test_pages_render(client):
-    for path in ("/", "/red", "/m/zerotier", "/m/takserver", "/m/mediamtx", "/m/mumble", "/m/jitsi"):
+    for path in ("/", "/red", "/m/zerotier", "/m/takserver", "/m/mediamtx", "/m/mumble", "/m/sftp", "/m/jitsi"):
         r = client.get(path)
         assert r.status_code == 200, path
         assert b"<html" in r.data
