@@ -7,7 +7,7 @@ import pytest
 import yaml
 
 from takconsole.core import docker
-from takconsole.modules import mediamtx, mumble, zerotier
+from takconsole.modules import mediamtx, mumble, sftp, zerotier
 
 MTX_PARAMS = {"rtsp": True, "rtmp": False, "srt": True, "hls": True, "webrtc": False,
               "publish_user": "publicador", "publish_pass": "pub-pass-123",
@@ -108,7 +108,7 @@ def test_env_file_single_quoted(tmp_path):
         docker.write_env(tmp_path / "y.env", {"A": "it's"})
 
 
-@pytest.mark.parametrize("mod", [mediamtx, mumble, zerotier])
+@pytest.mark.parametrize("mod", [mediamtx, mumble, sftp, zerotier])
 def test_compose_uses_host_network_or_loopback(mod, data_dir):
     data = mod.compose_data()
     for name, svc in data["services"].items():
@@ -123,6 +123,7 @@ def test_compose_uses_host_network_or_loopback(mod, data_dir):
 @pytest.mark.skipif(not shutil.which("docker"), reason="requiere docker compose")
 @pytest.mark.parametrize("mod,envname,env", [
     (mumble, "mumble.env", {"MUMBLE_CONFIG_WELCOMETEXT": '"Hola, equipo $x"'}),
+    (sftp, "sftp.env", {"SFTPGO_DEFAULT_ADMIN_USERNAME": "admin"}),
     (zerotier, "ztnet.env", {"POSTGRES_PASSWORD": "abc"}),
     (mediamtx, None, None),
 ])

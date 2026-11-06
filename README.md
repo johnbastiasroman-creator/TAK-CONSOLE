@@ -6,6 +6,7 @@ Consola web para desplegar y administrar, desde el navegador, un servidor de ope
 - **MediaMTX**: video en vivo (RTSP, RTMP, SRT, HLS, WebRTC), por defecto sin usuario ni contraseña para publicar ni para ver (se puede exigir autenticación).
 - **Mumble**: voz por canales, compatible con el plugin ATAK Vx, Mumla y el cliente Mumble.
 - **Jitsi Meet**: videollamadas en el navegador con salas por enlace (opcional, acceso abierto).
+- **Repositorio SFTP**: archivos y carpetas por SFTP o desde el navegador (SFTPGo), para compartir con los equipos de la VPN.
 - **ZeroTier local**: controlador propio con la interfaz web ZTNET, raíces públicas o raíz privada (planet) a elección.
 
 Una clonación, una contraseña, una URL. La inspiración de diseño es [infra-TAK](https://github.com/takwerx/infra-TAK); este proyecto es una implementación independiente, sin código copiado de él.
@@ -55,6 +56,7 @@ Se puede volver a ejecutar para reparar o actualizar. Para recuperar el acceso: 
 3. MediaMTX      Video. Opcional: RTSPS con certificado de la CA de TAK.
    Mumble        Voz. Opcional: certificado firmado por la CA de TAK.
    Jitsi Meet    Videollamadas en el navegador. Opcional.
+   Repositorio SFTP  Archivos y carpetas por SFTP o navegador. Opcional.
         ↓
 4. Red y firewall  Limita los servicios a ZeroTier (y opcionalmente a una LAN) y activa UFW.
 ```
@@ -113,6 +115,15 @@ Si vuelves a ejecutar el despliegue sin subir un `.deb` nuevo, se reconfigura la
 - Certificado opcional firmado por la CA de TAK, para que los equipos que ya confían en esa CA validen también la voz.
 - Clientes: [ATAK Plugin: Vx](https://play.google.com/store/apps/details?id=com.atakmap.android.gbr.vx.plugin) (TAK Product Center; funciona con servidores Mumble/Murmur o en multicast), [Mumla](https://f-droid.org/packages/se.lublin.mumla) en Android y Mumble de escritorio.
 
+### Repositorio SFTP
+
+- Imagen oficial `drakkan/sftpgo:v2.7.6` ([SFTPGo](https://github.com/drakkan/sftpgo)) en red de host. Un solo servicio ofrece **SFTP** (puerto `2022/tcp`, el predeterminado de la imagen) y un **cliente web** (puerto configurable, `8085` por defecto, ruta `/web/client`) donde se suben archivos, se crean carpetas y se descarga. La administración de usuarios está en `/web/admin`. En la página del módulo, «Abrir repositorio» y «Administración» abren esas rutas en otra ventana con la dirección con la que abriste la consola.
+- Configuración por variables `SFTPGO_*` desde un `.env` con permisos 600: administrador inicial (`SFTPGO_DEFAULT_ADMIN_USERNAME` / `SFTPGO_DEFAULT_ADMIN_PASSWORD`, con `SFTPGO_DATA_PROVIDER__CREATE_DEFAULT_ADMIN`), puerto web (`SFTPGO_HTTPD__BINDINGS__0__PORT`) y, si lo marcas, HTTPS con el certificado de la consola (`SFTPGO_HTTPD__BINDINGS__0__ENABLE_HTTPS` y `…CERTIFICATE_FILE` / `…CERTIFICATE_KEY_FILE`).
+- Tras el despliegue la consola crea por la API REST de SFTPGo un **usuario de repositorio** con acceso completo a su propia carpeta (`/srv/sftpgo/data/<usuario>`). Si la API no responde como se espera, el despliegue **no falla**: avisa y el usuario se crea a mano en «Administración».
+- El administrador inicial lo crea SFTPGo solo la primera vez. Si cambias su contraseña dentro de SFTPGo, la que muestra la consola queda desactualizada (y la consola ya no podrá crear usuarios por la API).
+- Los archivos están en `stacks/sftp/data/srv` y la base de usuarios y las claves de host en `stacks/sftp/data/lib`; se conservan al desinstalar.
+- Licencia: SFTPGo es AGPL-3.0-only con términos adicionales; aquí corre sin modificar, como programa independiente en su contenedor (ver `NOTICE`).
+
 ### Jitsi Meet
 
 - Compose oficial de [docker-jitsi-meet](https://github.com/jitsi/docker-jitsi-meet) (etiqueta `stable-11248-2`, Apache-2.0), incluido tal cual en `takconsole/modules/jitsi_compose.upstream.yml`: cuatro contenedores (web, Prosody, Jicofo y videopuente) con imágenes de `ghcr.io/jitsi` fijadas a esa versión. La instalación por paquetes `apt` de Jitsi exige Ubuntu 24.04 o posterior según su guía oficial, y esta consola usa Ubuntu 22.04, por eso se usa Docker.
@@ -150,6 +161,7 @@ Cada módulo instalado muestra al final de su página el panel **Estado y activi
 |---|---|---|---|
 | MediaMTX | `docker logs` | conexiones, publica/lee, stream activo, clave rechazada (formato de MediaMTX 1.21.2) | API local: sesiones RTSP/RTSPS, conexiones RTMP/RTMPS/SRT, sesiones WebRTC/HLS |
 | Mumble | `docker logs` | conexión, autenticado, desconexión, rechazo, expulsión, cambio de canal (servidor 1.6.870) | **Estimado** desde el registro; se contrasta con las conexiones TCP abiertas (`ss`) |
+| Repositorio SFTP | `docker logs` | sin clasificar por evento: se muestra el registro de SFTPGo tal cual | Conexiones TCP abiertas ahora (`ss`) en los puertos SFTP y web |
 | TAK Server | `/opt/tak/logs` (mensajería o API) | avisos y errores, más pocos eventos sin lista oficial | API REST en 127.0.0.1:8443 con el certificado `admin` (`/Marti/api/subscriptions/all`) |
 | ZeroTier | contenedores del nodo, ZTNET, Caddy y base de datos | solo avisos y errores | pares `LEAF` de `zerotier-cli listpeers` |
 
@@ -168,7 +180,7 @@ La consola tiene tres roles fijos. El primer usuario (`admin`, el que crea el in
 | ZeroTier: unir este servidor a una red o sacarlo de ella | ✔ | ✔ | — |
 | Desplegar, redesplegar y desinstalar; borrar datos de TAK Server | ✔ | — | — |
 | Red y firewall, certificado HTTPS de la consola, política de TAK, planet de ZeroTier | ✔ | — | — |
-| Ver secretos (contraseñas de MediaMTX y Mumble, `admin.p12`, CA, truststore) | ✔ | — | — |
+| Ver secretos (contraseñas de MediaMTX, Mumble y el repositorio SFTP, `admin.p12`, CA, truststore) | ✔ | — | — |
 | Gestionar usuarios | ✔ | — | — |
 | Cambiar la apariencia (nombre, logo, icono, color) | ✔ | — | — |
 
@@ -193,7 +205,7 @@ Solo administradores (menú *Actualizaciones*, con una insignia cuando hay algo 
 |---|---|---|
 | **Sistema operativo** | `apt-get update` + simulación de `apt-get dist-upgrade` (paquetes y cuántos son de seguridad) | `apt-get dist-upgrade` sin preguntas (conserva los archivos de configuración locales; needrestart solo avisa). **TAK Server queda retenido** (`apt-mark hold`) mientras dura, como hace infra-TAK. No se aplica si quitara paquetes. Si deja el reinicio pendiente, avisa y ofrece *Reiniciar servidor* (pide tu contraseña). No cambia de versión de Ubuntu. |
 | **La consola** | `git fetch` y cuántos cambios hay por delante (con su lista) | Ejecuta `scripts/update.sh` en una **unidad de systemd aparte** (el reinicio del servicio mataría una tarea que viviera dentro de él); la página espera a que vuelva y se recarga. Se niega si hay archivos modificados a mano o commits propios. |
-| **Servicios en contenedores** (ZeroTier/ZTNET, Streaming Server, Mumble, Tactical VCO) | Compara la imagen que corre con la fijada en la consola, y consulta si el proveedor publicó algo más nuevo (`git ls-remote` de sus etiquetas en GitHub) | Cada servicio usa **versiones fijadas y probadas**. *Aplicar* vuelve a desplegar con la configuración guardada y la versión fijada actual (llega con una actualización de la consola). Las novedades del proveedor solo se muestran: no se aplican solas. PostgreSQL de ZTNET no se vigila (su serie 15 es deliberada). |
+| **Servicios en contenedores** (ZeroTier/ZTNET, Streaming Server, Mumble, Repositorio SFTP, Tactical VCO) | Compara la imagen que corre con la fijada en la consola, y consulta si el proveedor publicó algo más nuevo (`git ls-remote` de sus etiquetas en GitHub) | Cada servicio usa **versiones fijadas y probadas**. *Aplicar* vuelve a desplegar con la configuración guardada y la versión fijada actual (llega con una actualización de la consola). Las novedades del proveedor solo se muestran: no se aplican solas. PostgreSQL de ZTNET no se vigila (su serie 15 es deliberada). |
 | **TAK Server** | Versión instalada y la del paquete subido | Subes el `.deb` nuevo y *Actualizar TAK Server* lo instala **sobre el servicio que ya corre** (`apt install` del paquete, la vía que documenta TAK Server): comprueba que sea más nuevo, verifica la firma si subiste llave y política, **respalda** configuración, certificados y la base (`data/backups`), detiene el servicio, instala, arranca, y comprueba que dpkg quede en la versión nueva y si `CoreConfig.xml` cambió. No regenera certificados ni configuración. |
 
 Límites: la comprobación necesita salida a internet (apt y github.com); las tareas usan el mismo turno único que los despliegues, así que no se pisan; no hay reversión automática (si algo falla, los respaldos de TAK Server quedan en `data/backups`).
@@ -230,6 +242,7 @@ Seguridad de lo que se sube: el tipo se decide por el **contenido** del archivo,
 | 8888/tcp | MediaMTX HLS | Según política (si está activo) |
 | 8889/tcp, 8189/udp | MediaMTX WebRTC | Según política (si está activo) |
 | 64738/tcp+udp | Mumble | Según política |
+| 2022/tcp, 8085/tcp (configurable) | Repositorio SFTP (SFTP y cliente web) | Según política |
 | 443/tcp (configurable), 10000/udp | Jitsi Meet | Solo en las IP elegidas; **no** pasa por UFW |
 | 127.0.0.1 | 3000 (ZTNET), 5434 (PostgreSQL de ZTNET), 9993/tcp (API ZeroTier), 9997 (API MediaMTX), 18080 (API del videopuente de Jitsi) | Solo local |
 
@@ -259,7 +272,7 @@ takconsole/
   cli.py                set-password, list-users, console-cert
   core/                 settings (JSON), jobs (tareas en segundo plano), shell, firewall,
                         docker, certs, system, validate, auth, users, rbac, audit, branding
-  modules/              un archivo por servicio: zerotier, takserver, mediamtx, mumble
+  modules/              un archivo por servicio: zerotier, takserver, mediamtx, mumble, sftp, jitsi
   templates/            páginas (Jinja2)
   static/               CSS, JS y fuentes Barlow (OFL) servidas localmente
 scripts/                reset-password.sh, update.sh
@@ -298,6 +311,7 @@ TAKCONSOLE_DRY_RUN=1 TAKCONSOLE_PORT=5099 gunicorn -c gunicorn.conf.py wsgi:app 
 - **Paquetes de conexión**: siguen el formato usado por otros proyectos abiertos (manifest + `server.pref` + truststore + `.p12`). Pruébalos con tu versión de ATAK/iTAK.
 - **Enrolamiento por QR** (`tak://com.atakmap.app/enroll`) no está incluido: ATAK exige un certificado de servidor de confianza pública en 8446, que no aplica a una red solo ZeroTier.
 - **Solo instalación nativa (.deb)** de TAK Server. La variante Docker (`takserver-docker-*.zip`) queda para una versión futura.
+- **Repositorio SFTP sin probar con la imagen real.** El módulo se probó con Docker y con la API de SFTPGo simulados. Sin verificar en un servidor real: que exista la etiqueta `v2.7.6` de la imagen en Docker Hub (la etiqueta existe en el repositorio de GitHub), los nombres de variables `SFTPGO_DATA_PROVIDER__CREATE_DEFAULT_ADMIN` y del puerto SFTP (se infirieron del esquema `SFTPGO_<sección>__<clave>` de la documentación), el flujo de token de la API (`GET /api/v2/token` con Basic; reintenta con POST si recibe 405) y el valor `status: 1` del usuario. Si la creación automática falla, el módulo lo indica y el usuario se crea en «Administración». No hay integración con los usuarios de TAK ni cuotas.
 - **Mumble** no integra todavía usuarios de TAK (autenticación vía ICE) ni crea canales por grupo.
 - **Jitsi Meet sin probar con contenedores reales.** El compose se valida con `docker compose config` y los despliegues se prueban con Docker simulado, pero no se ejecutó con las imágenes de `ghcr.io/jitsi`. Sin verificar en un servidor real: arranque de los cuatro contenedores con esta configuración, audio/video entre equipos de redes distintas (ZeroTier y LAN), la cifra de participantes que lee de `/colibri/stats` (se tomó de la documentación del videopuente) y el diseño de la página de inicio dentro del contenedor real (se verificó con el CSS compilado del propio Jitsi `stable-11248` en un navegador, pero no con la imagen web en ejecución). No hay autenticación de usuarios ni integración con TAK Server.
 - **La consola corre como root.** Un proceso sin privilegios con un intermediario de comandos permitidos está en la hoja de ruta.

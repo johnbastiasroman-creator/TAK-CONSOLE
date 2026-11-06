@@ -236,9 +236,13 @@ def test_los_secretos_solo_los_ve_el_administrador(app, clients):
         "read_user": "vis", "read_pass": "SECRETO-VIS-1"}})
     settings.replace_section("mumble", {"installed": True, "params": {
         "server_pass": "SECRETO-SRV-1", "superuser_pass": "SECRETO-SU-1"}})
+    settings.replace_section("sftp", {"installed": True, "params": {
+        "http_port": 8085, "admin_user": "admin", "admin_pass": "SECRETO-ADM-1",
+        "repo_user": "repositorio", "repo_pass": "SECRETO-REP-1"}})
     for role, visible in (("admin", True), ("operator", False), ("viewer", False)):
         for page, secrets_ in (("mediamtx", ["SECRETO-PUB-1", "SECRETO-VIS-1"]),
-                               ("mumble", ["SECRETO-SRV-1", "SECRETO-SU-1"])):
+                               ("mumble", ["SECRETO-SRV-1", "SECRETO-SU-1"]),
+                               ("sftp", ["SECRETO-ADM-1", "SECRETO-REP-1"])):
             html = clients[role].get(f"/m/{page}").get_data(as_text=True)
             for s in secrets_:
                 assert (s in html) is visible, f"{role} {page} {s}"
