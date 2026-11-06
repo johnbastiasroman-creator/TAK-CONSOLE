@@ -628,6 +628,124 @@ class TakServer(Module):
             time.sleep(10)
         job.warn("8443 aún no responde; el servicio API puede seguir iniciando")
 
+    # ── actualización con un paquete subido ─────────────────────────────────
+    def update(self, job, verify=False):
+        """Actualiza TAK Server en su sitio con el .deb subido: respaldo, `apt install` del paquete.
+
+        Es la ruta que documenta TAK Server para actualizar (apt install ./takserver-X.deb,
+        Configuration Guide 5.2, §5.2.4). No regenera certificados ni CoreConfig.xml."""
+        total = 6
+        if config.DRY_RUN:
+            job.warn("Modo de prueba (TAKCONSOLE_DRY_RUN=1): no se modifica el sistema")
+            return
+        st = self.state()
+        pkg = st.get("package")
+
+        job.step(1, total, "Comprobaciones")
+        current = self.package_version()
+        if not current:
+            raise JobFailed("TAK Server no está instalado: instálalo desde su módulo")
+        if not (pkg and Path(pkg).exists()):
+            raise JobFailed("Sube primero el paquete .deb de la nueva versión")
+        new = st.get("package_version") or ""
+        if not new:
+            info = capture(["dpkg-deb", "-f", pkg, "Version"])
+            new = info.output.strip() if info.ok else ""
+        if not new:
+            raise JobFailed("No se pudo leer la versión del paquete subido")
+        if not capture(["dpkg", "--compare-versions", new, "gt", current]).ok:
+            raise JobFailed(f"El paquete ({new}) no es más nuevo que el instalado ({current}). "
+                            "Esta acción no instala versiones anteriores ni la misma.")
+        free = system.disk_gb("/").get("free")
+        if free and free < 5:
+            raise JobFailed(f"Quedan {free} GB libres en /: se necesitan al menos 5 GB")
+        job.ok(f"{current} → {new}")
+
+        job.step(2, total, "Verificación de firma del paquete")
+        self._verify(job, pkg, verify)
+
+        job.step(3, total, "Respaldo")
+        before = self._file_digest(CORECONFIG)
+        self._backup(job)
+        self._backup_db(job)
+
+        job.step(4, total, "Instalación del paquete")
+        run(["systemctl", "stop", "takserver"], log=job.log, check=False, timeout=300)
+        run(["apt-get", "install", "-y", "-o", "DPkg::Lock::Timeout=600",
+             "-o", "Dpkg::Options::=--force-confold", pkg],
+            env={"DEBIAN_FRONTEND": "noninteractive", "NEEDRESTART_SUSPEND": "1"},
+            log=job.log, timeout=3600)
+
+        job.step(5, total, "Arranque del servicio")
+        self._start_and_wait(job)
+
+        job.step(6, total, "Verificación")
+        installed = self.package_version()
+        if installed != new:
+            raise JobFailed(f"Tras instalar, dpkg informa «{installed or 'no instalado'}» en lugar de "
+                            f"{new}. Los respaldos están en {config.DATA_DIR / 'backups'}.")
+        job.ok(f"TAK Server {installed} instalado")
+        if before and self._file_digest(CORECONFIG) != before:
+            job.warn("El paquete modificó CoreConfig.xml. Compáralo con el respaldo en "
+                     f"{config.DATA_DIR / 'backups'} por si se perdió algún ajuste.")
+        else:
+            job.ok("CoreConfig.xml sin cambios")
+        if not system.port_listening(STREAM_PORT, "tcp"):
+            job.warn("8089/tcp no está en escucha todavía: revisa /opt/tak/logs/takserver-messaging.log")
+        self.save_state(version=installed, package=None, package_version=None)
+        try:
+            os.unlink(pkg)
+        except OSError:
+            pass
+        from ..core import updates
+        updates.record("TAK Server", True, f"{current} → {installed}")
+
+    @staticmethod
+    def _file_digest(path):
+        import hashlib
+        try:
+            return hashlib.sha256(Path(path).read_bytes()).hexdigest()
+        except OSError:
+            return ""
+
+    def _backup_db(self, job):
+        """Copia de la base (pg_dump -Fc). Si existe y no se puede copiar, no se sigue."""
+        info = self.tak_db()
+        try:
+            check_db_info(info)
+        except ValueError as e:
+            raise JobFailed(f"No hago copia de la {e}: no parece una base de TAK Server")
+        if not which("pg_dump") or not self.db_exists(info):
+            job.warn("No se encontró la base de TAK Server en este equipo (¿remota?): "
+                     "sigue sin copia de la base")
+            return
+        probe = ["runuser", "-u", "postgres", "--", "psql", "-X", "-tA", "-p", str(info["port"]),
+                 "-d", "postgres", "-c", f"SELECT pg_database_size('{info['name']}')"]
+        size = capture(probe).output.strip()
+        free = system.disk_gb(str(config.DATA_DIR)).get("free") or 0
+        if size.isdigit() and free and int(size) * 1.2 > free * 1024 ** 3:
+            raise JobFailed(f"No hay espacio para copiar la base ({int(size) // 1024 ** 2} MB) en "
+                            f"{config.DATA_DIR / 'backups'}: libera disco y reintenta")
+        dest_dir = config.DATA_DIR / "backups"
+        dest_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(dest_dir, 0o700)
+        dest = dest_dir / f"takserver-db-{datetime.now().strftime('%Y%m%d-%H%M%S')}.dump"
+        argv = ["runuser", "-u", "postgres", "--", "pg_dump", "-Fc", "-p", str(info["port"]),
+                info["name"]]
+        job.log("$ " + " ".join(argv) + f" > {dest}")
+        import subprocess
+        fd = os.open(dest, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, "wb") as fh:
+            cp = subprocess.run(argv, stdout=fh, stderr=subprocess.PIPE, timeout=7200)
+        if cp.returncode != 0:
+            err = (cp.stderr or b"").decode("utf-8", errors="replace").strip()
+            try:
+                dest.unlink()
+            except OSError:
+                pass
+            raise JobFailed(f"pg_dump falló: {err[:300]}")
+        job.ok(f"Copia de la base «{info['name']}» en {dest} ({dest.stat().st_size // 1024} KB)")
+
     def _admins(self, job, p, secrets):
         if not USERMANAGER.exists() and not config.DRY_RUN:
             job.warn("No se encontró UserManager.jar; omitiendo administradores")

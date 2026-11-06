@@ -274,6 +274,13 @@ class MediaMTX(Module):
         self.save_state(installed=True, params=p, tls=p["tls"])
         self.apply_firewall(log=job.log)
 
+    def containers(self):
+        return {CONTAINER: IMAGE}
+
+    def upstream(self):
+        return [{"label": "MediaMTX", "repo": "bluenviron/mediamtx",
+                 "pattern": r"v\d+\.\d+\.\d+", "current": "v" + IMAGE.rsplit(":", 1)[1]}]
+
     def actions(self):
         def c(*args):
             def _do(job):

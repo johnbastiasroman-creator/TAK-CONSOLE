@@ -297,6 +297,27 @@ class ZeroTier(Module):
         job.ok(f"Abre {public_url} y crea de inmediato la cuenta de administrador de ZTNET "
                "(el primer usuario registrado queda como administrador).")
 
+    def containers(self):
+        return {ZT_CONTAINER: ZT_IMAGE, PG_CONTAINER: PG_IMAGE, ZTNET_CONTAINER: ZTNET_IMAGE,
+                CADDY_CONTAINER: CADDY_IMAGE}
+
+    def upstream(self):
+        # PostgreSQL queda fuera: se fija a propósito en la serie 15 (ZTNET la usa así).
+        return [
+            {"label": "ZeroTier", "repo": "zyclonite/zerotier-docker",
+             "pattern": r"\d+\.\d+\.\d+", "current": ZT_IMAGE.rsplit(":", 1)[1]},
+            {"label": "ZTNET", "repo": "sinamics/ztnet",
+             "pattern": r"v\d+\.\d+\.\d+", "current": "v" + ZTNET_IMAGE.rsplit(":", 1)[1].lstrip("v")},
+            {"label": "Caddy", "repo": "caddyserver/caddy",
+             "pattern": r"v\d+\.\d+\.\d+", "current": "v" + CADDY_IMAGE.rsplit(":", 1)[1].lstrip("v")},
+        ]
+
+    def reapply(self, job):
+        host = self.state().get("public_host")
+        if not host:
+            raise JobFailed("No hay dirección pública guardada: aplica la configuración desde su página")
+        self.deploy(job, {"public_host": host})
+
     def actions(self):
         def c(*args):
             def _do(job):

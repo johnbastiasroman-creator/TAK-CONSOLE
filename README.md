@@ -43,7 +43,7 @@ El instalador:
 5. Agrega reglas UFW para SSH y la consola **sin activar UFW**: lo activas tú desde *Red y firewall*.
 6. Crea y arranca el servicio `tak-console` (gunicorn en `https://<ip>:5001`).
 
-Se puede volver a ejecutar para reparar o actualizar. Para recuperar el acceso: `sudo scripts/reset-password.sh` (ver *Usuarios y roles*). Para actualizar desde git: `sudo scripts/update.sh`.
+Se puede volver a ejecutar para reparar o actualizar. Para recuperar el acceso: `sudo scripts/reset-password.sh` (ver *Usuarios y roles*). Para actualizar desde git: `sudo scripts/update.sh`, o el botón de la sección *Actualizaciones*.
 
 ## Orden de despliegue
 
@@ -184,6 +184,19 @@ Cómo se aplica:
 - **Instalaciones anteriores**: el único usuario de `config/auth.json` pasa solo a `config/users.json` como Administrador la primera vez que arranca esta versión (el archivo viejo no se borra). Habrá que iniciar sesión otra vez una vez.
 
 Qué no cubre: los roles protegen la consola, no los servicios. Al unir o sacar el servidor de una red ZeroTier, la consola reaplica las reglas de firewall de los servicios según las interfaces ZeroTier detectadas, de modo que un Operador influye indirectamente en esas reglas (no puede editarlas). Tampoco hay límite por grupo: un Operador puede crear certificados de TAK en cualquier grupo.
+
+## Actualizaciones
+
+Solo administradores (menú *Actualizaciones*, con una insignia cuando hay algo pendiente). **Buscar nunca cambia nada y aplicar lo decides tú.** La consola busca sola una vez al día (desactivable con `TAKCONSOLE_AUTOCHECK=0`) y también con el botón *Buscar actualizaciones*.
+
+| Qué | Cómo se busca | Cómo se aplica |
+|---|---|---|
+| **Sistema operativo** | `apt-get update` + simulación de `apt-get dist-upgrade` (paquetes y cuántos son de seguridad) | `apt-get dist-upgrade` sin preguntas (conserva los archivos de configuración locales; needrestart solo avisa). **TAK Server queda retenido** (`apt-mark hold`) mientras dura, como hace infra-TAK. No se aplica si quitara paquetes. Si deja el reinicio pendiente, avisa y ofrece *Reiniciar servidor* (pide tu contraseña). No cambia de versión de Ubuntu. |
+| **La consola** | `git fetch` y cuántos cambios hay por delante (con su lista) | Ejecuta `scripts/update.sh` en una **unidad de systemd aparte** (el reinicio del servicio mataría una tarea que viviera dentro de él); la página espera a que vuelva y se recarga. Se niega si hay archivos modificados a mano o commits propios. |
+| **Servicios en contenedores** (ZeroTier/ZTNET, Streaming Server, Mumble, Tactical VCO) | Compara la imagen que corre con la fijada en la consola, y consulta si el proveedor publicó algo más nuevo (`git ls-remote` de sus etiquetas en GitHub) | Cada servicio usa **versiones fijadas y probadas**. *Aplicar* vuelve a desplegar con la configuración guardada y la versión fijada actual (llega con una actualización de la consola). Las novedades del proveedor solo se muestran: no se aplican solas. PostgreSQL de ZTNET no se vigila (su serie 15 es deliberada). |
+| **TAK Server** | Versión instalada y la del paquete subido | Subes el `.deb` nuevo y *Actualizar TAK Server* lo instala **sobre el servicio que ya corre** (`apt install` del paquete, la vía que documenta TAK Server): comprueba que sea más nuevo, verifica la firma si subiste llave y política, **respalda** configuración, certificados y la base (`data/backups`), detiene el servicio, instala, arranca, y comprueba que dpkg quede en la versión nueva y si `CoreConfig.xml` cambió. No regenera certificados ni configuración. |
+
+Límites: la comprobación necesita salida a internet (apt y github.com); las tareas usan el mismo turno único que los despliegues, así que no se pisan; no hay reversión automática (si algo falla, los respaldos de TAK Server quedan en `data/backups`).
 
 ## Apariencia
 

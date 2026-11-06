@@ -60,6 +60,9 @@ ENDPOINT_PERMS = {
     "appearance_image_clear": ADMIN, "appearance_reset": ADMIN,
     "appearance_footer_text": ADMIN, "appearance_footer_image": ADMIN,
     "appearance_footer_clear": ADMIN, "appearance_footer_order": ADMIN,
+    "updates_page": ADMIN, "api_updates_check": ADMIN, "api_updates_os": ADMIN,
+    "api_updates_console": ADMIN, "api_updates_module": ADMIN, "api_updates_takserver": ADMIN,
+    "api_updates_reboot": ADMIN, "api_updates_status": ADMIN,
 }
 
 
