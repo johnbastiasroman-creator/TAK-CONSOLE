@@ -7,7 +7,8 @@ from flask import (Flask, Response, abort, g, jsonify, redirect, render_template
                    send_file, session, url_for)
 
 from . import config
-from .core import audit, auth, branding, certs, firewall, monitor, rbac, settings, system, users
+from .core import (audit, auth, branding, certs, firewall, monitor, rbac, settings, system, updates,
+                   users)
 from .core.jobs import JOBS, Busy
 
 PUBLIC_ENDPOINTS = rbac.PUBLIC_ENDPOINTS
@@ -102,6 +103,7 @@ def create_app():
             "modules": MODULES,
             "csrf_token": auth.csrf_token(session),
             "current_job": JOBS.current(),
+            "updates_pending": updates.pending_count() if g.get("user") else 0,
             "current_user": g.get("user"),
             "role_label": rbac.label(g.get("role", "")),
         }
@@ -223,6 +225,57 @@ def create_app():
             JOBS.start(key, title, fn, *args)
         except Busy as e:
             return jsonify(ok=False, error=str(e)), 409
+        return jsonify(ok=True)
+
+    # ── actualizaciones ─────────────────────────────────────────────────────
+    @app.route("/actualizaciones")
+    def updates_page():
+        st = updates.state()
+        return render_template("updates.html", u=st, tak=updates.takserver_info(),
+                               reboot=updates.reboot_required(), selfup=updates.selfupdate_status(),
+                               last_job=JOBS.get("updates"), tak_pkg_ok=_tak_pkg_ok())
+
+    def _tak_pkg_ok():
+        from pathlib import Path
+        pkg = MODULES["takserver"].state().get("package")
+        return bool(pkg and Path(pkg).exists())
+
+    @app.route("/api/updates/status")
+    def api_updates_status():
+        return jsonify(ok=True, selfupdate=updates.selfupdate_status(),
+                       pending=updates.pending_count())
+
+    @app.route("/api/updates/check", methods=["POST"])
+    def api_updates_check():
+        return _start("updates", "Buscar actualizaciones", updates.check_all)
+
+    @app.route("/api/updates/os", methods=["POST"])
+    def api_updates_os():
+        return _start("updates", "Actualizar el sistema operativo", updates.os_apply)
+
+    @app.route("/api/updates/console", methods=["POST"])
+    def api_updates_console():
+        return _start("updates", "Actualizar la consola", updates.console_apply)
+
+    @app.route("/api/updates/module/<key>", methods=["POST"])
+    def api_updates_module(key):
+        m = MODULES.get(key)
+        if not m or not m.containers():
+            abort(404)
+        return _start("updates", f"Aplicar versión fijada: {m.name}", updates.module_apply, key)
+
+    @app.route("/api/updates/takserver", methods=["POST"])
+    def api_updates_takserver():
+        verify = request.form.get("verify_signature") in ("1", "on", "true")
+        return _start("updates", "Actualizar TAK Server", MODULES["takserver"].update, verify)
+
+    @app.route("/api/updates/reboot", methods=["POST"])
+    def api_updates_reboot():
+        if not auth.verify(session.get("user", ""), request.form.get("password", "")):
+            return jsonify(ok=False, error="Contraseña de la consola incorrecta"), 403
+        if JOBS.busy():
+            return jsonify(ok=False, error=f"Hay una tarea en curso: {JOBS.current().title}"), 409
+        updates.reboot()
         return jsonify(ok=True)
 
     # ── red y firewall ──────────────────────────────────────────────────────

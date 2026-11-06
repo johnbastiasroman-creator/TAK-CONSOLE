@@ -28,6 +28,7 @@
       <a href="/red" {% if request.path == '/red' %}aria-current="page"{% endif %}>Red y firewall</a>
       <a href="/usuarios" {% if request.path == '/usuarios' %}aria-current="page"{% endif %}>Usuarios</a>
       <a href="/apariencia" {% if request.path == '/apariencia' %}aria-current="page"{% endif %}>Apariencia</a>
+      <a href="/actualizaciones" {% if request.path == '/actualizaciones' %}aria-current="page"{% endif %}>Actualizaciones{% if updates_pending %} <span class="badge" title="Pendientes según la última búsqueda">{{ updates_pending }}</span>{% endif %}</a>
       {% endif %}
     </nav>
     {% if current_user %}
@@ -42,7 +43,7 @@
   <main>
     {% if current_job %}
     <div class="banner" role="status">{{ led('warn') }} Tarea en curso: {{ current_job.title }}
-      <a href="{{ ('/m/' ~ current_job.key) if current_job.key in modules else '/red' }}">Ver registro</a></div>
+      <a href="{{ ('/m/' ~ current_job.key) if current_job.key in modules else ('/actualizaciones' if current_job.key == 'updates' else '/red') }}">Ver registro</a></div>
     {% endif %}
     {% block content %}{% endblock %}
   </main>

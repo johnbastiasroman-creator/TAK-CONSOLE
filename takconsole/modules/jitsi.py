@@ -364,6 +364,13 @@ class Jitsi(Module):
         return found if set(found) == set(SECRET_NAMES) else None
 
     # ── control ─────────────────────────────────────────────────────────────
+    def containers(self):
+        return {container(n): f"{IMAGE_REPO}/{n}:{RELEASE}" for n in SERVICES}
+
+    def upstream(self):
+        return [{"label": "Jitsi Meet (docker-jitsi-meet)", "repo": "jitsi/docker-jitsi-meet",
+                 "pattern": r"stable-\d+(-\d+)?", "current": RELEASE}]
+
     def actions(self):
         def c(*args):
             def _do(job):

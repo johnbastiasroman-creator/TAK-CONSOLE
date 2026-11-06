@@ -356,3 +356,15 @@ tr.manage > td { background: #1f2723; padding: 14px 16px; }
 .fslot-tools .btn { padding-left: 8px; padding-right: 8px; }
 .fslot-tools .btn:disabled { opacity: .35; cursor: default; }
 @media (max-width: 640px) { .footgrid { gap: 6px; } .footcell img { max-height: 36px; } .foottext { font-size: 14px; } }
+
+/* ── Actualizaciones ────────────────────────────────────────────────────── */
+.badge { display: inline-block; min-width: 18px; padding: 1px 6px; margin-left: 6px; border-radius: 999px;
+  background: var(--amber); color: #1a1a14; font: 700 12px/1.5 var(--display); text-align: center; }
+ul.plain { list-style: none; margin: 8px 0 0; padding: 0; font-size: 14px; }
+ul.plain li { padding: 3px 0; border-bottom: 1px solid var(--line-soft); overflow-wrap: anywhere; }
+.panel details { margin-top: 10px; }
+.panel details > summary { cursor: pointer; color: var(--muted); font-size: 14px; }
+pre.logtail { margin: 8px 0 0; max-height: 260px; overflow: auto; font: 12px/1.45 var(--mono); white-space: pre-wrap;
+  background: var(--bg, #0e1210); border: 1px solid var(--line); border-radius: var(--r-sm); padding: 10px; }
+.inline-form { margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--line-soft); }
+.inline-form .field { margin-bottom: 10px; }

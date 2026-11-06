@@ -171,7 +171,8 @@
           status.textContent = "Recibido: " + Object.values(data.saved).join(", ") + (data.version ? ` (versión ${data.version})` : "");
           form.classList.add("ready");
         }
-        if (form.hasAttribute("data-reload")) startedJob(true);
+        if (form.hasAttribute("data-upload-reload")) setTimeout(() => location.reload(), 900);
+        else if (form.hasAttribute("data-reload")) startedJob(true);
       };
       xhr.onerror = () => { busy(btn, false); showErrors(form, { error: "Se perdió la conexión durante la subida" }); };
       xhr.send(fd);
@@ -246,6 +247,45 @@
       startedJob(true);
     });
   });
+
+  // ── Actualizaciones: esperar a que la consola o el servidor vuelvan y recargar ─────────
+  async function waitForRestart() {
+    const note = $("#restart-note");
+    if (note) note.hidden = false;
+    const t0 = Date.now();
+    let down = false;
+    while (Date.now() - t0 < 600000) {
+      await new Promise((res) => setTimeout(res, 3000));
+      try {
+        const r = await fetch("/health", { cache: "no-store", credentials: "same-origin" });
+        if (r.ok && (down || Date.now() - t0 > 90000)) { location.reload(); return; }
+        if (!r.ok) down = true;
+      } catch (e) { down = true; }
+    }
+  }
+  $$("[data-restart-wait]").forEach((btn) => {
+    btn.addEventListener("click", async () => {
+      if (btn.dataset.confirm && !window.confirm(btn.dataset.confirm)) return;
+      busy(btn, true);
+      const { data } = await post(btn.dataset.restartWait);
+      if (!data.ok) { busy(btn, false); window.alert(data.error || "No se pudo iniciar la actualización"); return; }
+      startedJob(false);
+      waitForRestart();
+    });
+  });
+  $$("form[data-reboot]").forEach((form) => {
+    form.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      if (!window.confirm("¿Reiniciar el servidor ahora? Se cortan todos los servicios hasta que vuelva a arrancar.")) return;
+      clearErrors(form);
+      const btn = form.querySelector('[type="submit"]');
+      busy(btn, true);
+      const { data } = await post(form.dataset.api, new FormData(form));
+      if (!data.ok) { busy(btn, false); showErrors(form, data); return; }
+      waitForRestart();
+    });
+  });
+  if ($("[data-autowait]")) waitForRestart();
 
   $$("[data-logs]").forEach((btn) => {
     btn.addEventListener("click", async () => {

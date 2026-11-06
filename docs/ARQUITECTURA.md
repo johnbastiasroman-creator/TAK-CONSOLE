@@ -59,6 +59,10 @@ Navegador ──HTTPS:5001──▶ gunicorn (1 proceso, 8 hilos)
        def uninstall(self, job, params): ...
        def actions(self): ...         # {'restart': ('Reiniciar', fn(job))}
        def routes(self): ...          # rutas extra; heredan login y CSRF
+       # Si corre en contenedores, para que aparezca en «Actualizaciones» (core/updates.py):
+       def containers(self): ...      # {nombre_del_contenedor: imagen_fijada}
+       def upstream(self): ...        # [{'label', 'repo' (GitHub), 'pattern', 'current'}]
+       def reapply(self, job): ...    # opcional: por defecto deploy() con los params guardados
    ```
 
 2. Regístralo en `takconsole/modules/__init__.py`.

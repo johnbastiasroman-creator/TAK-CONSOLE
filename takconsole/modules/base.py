@@ -77,6 +77,26 @@ class Module:
         """{'restart': ('Reiniciar', callable(job))}"""
         return {}
 
+    # ── actualizaciones (core/updates.py) ───────────────────────────────────
+    def containers(self) -> dict:
+        """{nombre_del_contenedor: imagen fijada}; vacío si el módulo no usa contenedores."""
+        return {}
+
+    def upstream(self) -> list:
+        """Proyectos del proveedor a vigilar: [{'label', 'repo', 'pattern', 'current'}].
+
+        `repo` es de GitHub (owner/nombre); `pattern` es la expresión que debe cumplir por
+        completo una etiqueta estable; `current` es la etiqueta que usa hoy la consola."""
+        return []
+
+    def reapply(self, job):
+        """Vuelve a aplicar la configuración guardada con las versiones fijadas actuales."""
+        from ..core.jobs import JobFailed
+        params = self.state().get("params")
+        if not params:
+            raise JobFailed("No hay configuración guardada de este módulo: aplícala desde su página")
+        self.deploy(job, params)
+
     def routes(self) -> list:
         """[(regla, nombre, vista, métodos)]"""
         return []

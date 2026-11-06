@@ -1,0 +1,189 @@
+{% extends "base.html" %}
+{% from "_macros.html" import led, job_console %}
+{% block title %}Actualizaciones{% endblock %}
+{% block content %}
+{% set osr = u.get('os') or {} %}
+{% set con = u.get('console') or {} %}
+{% set mods = u.get('modules') or [] %}
+{% set pending = namespace(n=0) %}
+{% if osr.get('count') %}{% set pending.n = pending.n + 1 %}{% endif %}
+{% if con.get('behind') %}{% set pending.n = pending.n + 1 %}{% endif %}
+{% for r in mods %}{% if r.pending %}{% set pending.n = pending.n + 1 %}{% endif %}{% endfor %}
+{% if tak.newer %}{% set pending.n = pending.n + 1 %}{% endif %}
+
+<div class="page-head">
+  <div class="title">{{ led('off' if not u.get('checked_at') else ('warn' if pending.n else 'ok'), big=True) }}
+    <div><h1>Actualizaciones</h1>
+      <p>{% if not u.get('checked_at') %}Aún no se ha buscado.{% elif pending.n %}{{ pending.n }} pendiente{{ 's' if pending.n != 1 }}.{% else %}Todo al día.{% endif %}
+        Última búsqueda: {{ u.get('checked_at') | ago }}. La consola busca sola una vez al día; aplicar siempre lo decides tú.</p></div>
+  </div>
+  <div class="head-actions">
+    <button class="btn small primary" type="button" data-action="/api/updates/check">Buscar actualizaciones</button>
+  </div>
+</div>
+
+<div class="module">
+  <div>
+    {% if selfup.running %}
+    <div class="note" id="restart-note" data-autowait role="status"><p>Actualizando la consola… se reiniciará sola. Esta página se recarga cuando vuelva.</p></div>
+    {% else %}
+    <div class="note" id="restart-note" hidden role="status"><p>Esperando a que el servidor vuelva… esta página se recarga sola.</p></div>
+    {% endif %}
+
+    <section class="panel">
+      <h2>Sistema operativo</h2>
+      {% if osr.get('error') %}
+      <div class="note bad"><p>{{ osr.error }}</p></div>
+      {% elif not u.get('checked_at') %}
+      <p>Pulsa «Buscar actualizaciones» para ver los paquetes de Ubuntu pendientes.</p>
+      {% elif osr.get('count') %}
+      <p><strong>{{ osr.count }}</strong> paquete{{ 's' if osr.count != 1 }} por actualizar{% if osr.security %}, <strong>{{ osr.security }}</strong> de seguridad{% endif %}.
+        TAK Server queda retenido durante la actualización: se actualiza aparte, con su propio paquete.</p>
+      {% if osr.get('warn') %}<div class="note"><p>{{ osr.warn }}</p></div>{% endif %}
+      {% if osr.get('removals') %}<div class="note bad"><p>La actualización quitaría paquetes ({{ osr.removals | join(', ') }}); por seguridad no se aplica desde aquí.</p></div>{% endif %}
+      <details>
+        <summary>Ver paquetes</summary>
+        <table class="list">
+          <thead><tr><th>Paquete</th><th>Instalada</th><th>Nueva</th><th></th></tr></thead>
+          <tbody>
+          {% for p in osr.packages[:60] %}
+            <tr><td class="mono">{{ p.name }}</td><td class="mono">{{ p.old or '—' }}</td><td class="mono">{{ p.new }}</td><td>{% if p.security %}seguridad{% endif %}</td></tr>
+          {% endfor %}
+          </tbody>
+        </table>
+        {% if osr.count > 60 %}<p class="muted">Y {{ osr.count - 60 }} más.</p>{% endif %}
+      </details>
+      <div class="formfoot">
+        <button class="btn primary" type="button" data-action="/api/updates/os"
+          data-confirm="¿Actualizar el sistema operativo? Si se actualiza Docker o PostgreSQL, los servicios se reiniciarán unos segundos. Puede pedir reinicio al terminar.">Actualizar sistema</button>
+        <span class="muted">apt-get dist-upgrade, sin cambiar la versión de Ubuntu.</span>
+      </div>
+      {% else %}
+      <p>El sistema está al día.</p>
+      {% endif %}
+
+      {% if reboot.required %}
+      <div class="note"><p><strong>Hay que reiniciar el servidor</strong> para terminar de aplicar actualizaciones{% if reboot.packages %} (por: {{ reboot.packages[:6] | join(', ') }}){% endif %}.</p></div>
+      {% endif %}
+      <form data-reboot data-api="/api/updates/reboot" class="inline-form">
+        <div class="field" data-field="password">
+          <label for="f-rb-pass">Reiniciar servidor</label>
+          <input id="f-rb-pass" name="password" type="password" autocomplete="current-password" placeholder="Tu contraseña de la consola">
+          <span class="hint">Reinicia el equipo completo (también TAK Server y los contenedores). Escribe tu contraseña para confirmar.</span>
+          <span class="err" role="alert"></span>
+        </div>
+        <button class="btn small danger" type="submit">Reiniciar servidor</button>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2>Consola</h2>
+      {% if con.get('error') %}
+      <div class="note bad"><p>{{ con.error }}</p></div>
+      {% endif %}
+      <p>Versión instalada: <code>{{ con.get('version') or '—' }}</code>{% if con.get('branch') %} (rama <code>{{ con.branch }}</code>){% endif %}.</p>
+      {% if con.get('behind') %}
+      <p><strong>{{ con.behind }}</strong> cambio{{ 's' if con.behind != 1 }} nuevo{{ 's' if con.behind != 1 }} → <code>{{ con.latest }}</code></p>
+      <details open>
+        <summary>Qué cambia</summary>
+        <ul class="plain">{% for c in con.commits %}<li class="mono">{{ c }}</li>{% endfor %}</ul>
+      </details>
+      {% if con.dirty %}<div class="note bad"><p>Hay archivos modificados a mano ({{ con.dirty[:6] | join(', ') }}). Descártalos con <code>git checkout -- .</code> antes de actualizar.</p></div>{% endif %}
+      {% if con.ahead %}<div class="note bad"><p>Esta copia tiene commits propios que no están en el repositorio remoto: actualiza a mano con git.</p></div>{% endif %}
+      <div class="formfoot">
+        <button class="btn primary" type="button" data-restart-wait="/api/updates/console"
+          data-confirm="¿Actualizar la consola? Se reinicia el servicio (unos segundos); los servicios desplegados no se tocan." {% if con.dirty or con.ahead %}disabled{% endif %}>Actualizar consola</button>
+        <span class="muted">git pull + dependencias + reinicio del servicio. Los datos no se tocan.</span>
+      </div>
+      {% elif u.get('checked_at') and not con.get('error') %}
+      <p>La consola está al día.</p>
+      {% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>Servicios en contenedores</h2>
+      <p>Cada servicio usa una versión fijada y probada por la consola. «Aplicar» recrea sus contenedores con esa versión y la configuración guardada. Si el proveedor publicó algo más nuevo se muestra aquí, pero no se aplica solo: llega, ya probado, con una actualización de la consola.</p>
+      {% if mods %}
+      <table class="list">
+        <thead><tr><th>Servicio</th><th>Estado</th><th>Proveedor</th><th></th></tr></thead>
+        <tbody>
+        {% for r in mods %}
+          <tr>
+            <td><strong>{{ r.name }}</strong><br>{% for c in r.containers %}<span class="muted mono">{{ c.running or 'sin contenedor' }}</span><br>{% endfor %}</td>
+            <td>{% if r.pending %}Pendiente de aplicar:<br>{% for c in r.containers if c.ok is false %}<span class="mono">{{ c.pinned }}</span><br>{% endfor %}{% else %}Al día{% endif %}</td>
+            <td>{% for up in r.upstream %}
+              {% if up.error %}<span class="muted">{{ up.label }}: no se pudo consultar</span>
+              {% elif up.newer %}{{ up.label }}: hay <span class="mono">{{ up.latest }}</span> <span class="muted">(en uso {{ up.current }})</span>
+              {% else %}<span class="muted">{{ up.label }}: {{ up.current }} es la última</span>{% endif %}<br>
+            {% endfor %}</td>
+            <td>{% if r.pending %}<button class="btn small primary" type="button" data-action="/api/updates/module/{{ r.key }}"
+              data-confirm="¿Aplicar la versión fijada a {{ r.name }}? Sus contenedores se recrean; el servicio se interrumpe unos segundos.">Aplicar</button>{% endif %}</td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+      {% elif u.get('checked_at') %}<p class="empty-note">No hay servicios en contenedores desplegados.</p>
+      {% else %}<p class="empty-note">Sin datos todavía: busca actualizaciones.</p>{% endif %}
+    </section>
+
+    <section class="panel">
+      <h2>TAK Server</h2>
+      <p>Instalado: <code>{{ tak.installed or 'no instalado' }}</code>. Para actualizar, descarga el .deb de la nueva versión desde tak.gov y súbelo aquí; se instala sobre el servicio que ya corre, con respaldo previo de la configuración, los certificados y la base.</p>
+      {% if tak.installed %}
+      <form class="upload{% if tak_pkg_ok %} ready{% endif %}" data-upload="/api/m/takserver/upload" data-upload-reload>
+        <div class="grid2">
+          <div class="field" data-field="package"><label for="f-up-package">Paquete takserver_*.deb</label>
+            <input id="f-up-package" name="package" type="file" accept=".deb"><span class="err" role="alert"></span></div>
+          <div class="field"><label for="f-up-gpg">Llave GPG (opcional)</label>
+            <input id="f-up-gpg" name="gpg_key" type="file" accept=".key"><span class="hint">takserver-public-gpg.key</span></div>
+          <div class="field"><label for="f-up-pol">Política (opcional)</label>
+            <input id="f-up-pol" name="policy" type="file" accept=".pol"><span class="hint">deb_policy.pol</span></div>
+        </div>
+        <div class="formfoot">
+          <button class="btn" type="submit">Subir archivos</button>
+          <span class="muted" data-upload-status>{% if tak.staged %}Subido: {{ tak.staged_name }} ({{ tak.staged }}){% else %}Aún no hay paquete nuevo.{% endif %}</span>
+        </div>
+        <div class="progress"><progress max="100" value="0"></progress></div>
+      </form>
+      {% if tak.staged and not tak.newer %}
+      <div class="note bad"><p>El paquete subido ({{ tak.staged }}) no es más nuevo que el instalado ({{ tak.installed }}); no se puede usar para actualizar.</p></div>
+      {% endif %}
+      {% if tak.newer %}
+      <form data-api="/api/updates/takserver" data-reload data-confirm="¿Actualizar TAK Server de {{ tak.installed }} a {{ tak.staged }}? El servicio se detiene durante la actualización (puede tardar varios minutos) y los clientes se desconectan.">
+        {% if tak.has_key %}
+        <label class="check"><input type="checkbox" name="verify_signature" value="1" checked><span>Verificar la firma del paquete<small>Con la llave y la política subidas.</small></span></label>
+        {% endif %}
+        <div class="formfoot">
+          <button class="btn primary" type="submit">Actualizar TAK Server a {{ tak.staged }}</button>
+          <span class="muted">Respaldo en <code>data/backups</code> → detener → instalar → iniciar → verificar.</span>
+        </div>
+      </form>
+      {% endif %}
+      {% else %}
+      <p class="empty-note">TAK Server no está instalado: instálalo desde su módulo.</p>
+      {% endif %}
+    </section>
+  </div>
+
+  <aside>
+    {{ job_console('updates', last_job) }}
+    {% if selfup.log %}
+    <section class="panel">
+      <h2>Última actualización de la consola</h2>
+      <p class="muted">Desde {{ selfup.get('from') or '—' }}, {{ selfup.started | ago }}.</p>
+      <pre class="logtail">{{ selfup.log }}</pre>
+    </section>
+    {% endif %}
+    {% if u.get('history') %}
+    <section class="panel">
+      <h2>Historial</h2>
+      <ul class="plain">
+        {% for h in u.history | reverse %}
+        <li>{{ h.ts | datetime }} · {{ h.what }} {{ '✓' if h.ok else '✗' }}{% if h.detail %} <span class="muted">({{ h.detail }})</span>{% endif %}</li>
+        {% endfor %}
+      </ul>
+    </section>
+    {% endif %}
+  </aside>
+</div>
+{% endblock %}
